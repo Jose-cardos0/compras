@@ -1,42 +1,52 @@
-// Serviço de WhatsApp (simulado para demonstração)
-// Para integração real, você pode usar APIs como Twilio, WhatsApp Business API, etc.
+// Serviço de WhatsApp com links diretos (WhatsApp Web)
+// Solução simples e eficiente sem necessidade de APIs pagas
 
 export async function sendWhatsAppMessage(phoneNumber, message) {
   try {
-    // Simulação do envio de mensagem via WhatsApp
-    console.log(`📱 ENVIANDO WHATSAPP PARA: ${phoneNumber}`);
+    // Limpar e formatar o número
+    const cleanPhone = phoneNumber.replace(/\D/g, "");
+    const formattedPhone = cleanPhone.startsWith("55")
+      ? cleanPhone
+      : "55" + cleanPhone;
+
+    // Encoding da mensagem para URL
+    const encodedMessage = encodeURIComponent(message);
+
+    // Gerar link do WhatsApp
+    const whatsappURL = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+
+    // Log da ação (para debug)
+    console.log(`📱 GERANDO LINK WHATSAPP PARA: ${phoneNumber}`);
+    console.log(`🔗 LINK: ${whatsappURL}`);
     console.log(`📝 MENSAGEM: ${message}`);
-    console.log("✅ Mensagem enviada com sucesso!");
 
-    // Aqui você integraria com uma API real de WhatsApp
-    // Exemplo com Twilio:
-    /*
-    const response = await fetch('https://api.twilio.com/2010-04-01/Accounts/YOUR_ACCOUNT_SID/Messages.json', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + btoa('YOUR_ACCOUNT_SID:YOUR_AUTH_TOKEN'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        'From': 'whatsapp:+14155238886',
-        'To': `whatsapp:${phoneNumber}`,
-        'Body': message
-      })
-    });
-    
-    return await response.json();
-    */
+    // Abrir automaticamente o WhatsApp Web
+    if (typeof window !== "undefined") {
+      window.open(whatsappURL, "_blank");
+      console.log("✅ Link do WhatsApp aberto automaticamente!");
+    }
 
-    // Simulação de resposta bem-sucedida
     return {
       success: true,
-      messageId: `msg_${Date.now()}`,
+      whatsappURL: whatsappURL,
+      phoneNumber: formattedPhone,
+      message: message,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    console.error("❌ Erro ao enviar mensagem WhatsApp:", error);
+    console.error("❌ Erro ao gerar link WhatsApp:", error);
     throw error;
   }
+}
+
+// Função para apenas gerar o link sem abrir
+export function generateWhatsAppLink(phoneNumber, message) {
+  const cleanPhone = phoneNumber.replace(/\D/g, "");
+  const formattedPhone = cleanPhone.startsWith("55")
+    ? cleanPhone
+    : "55" + cleanPhone;
+  const encodedMessage = encodeURIComponent(message);
+  return `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
 }
 
 // Função para validar número de telefone
@@ -64,4 +74,13 @@ export function formatPhoneNumber(phone) {
   }
 
   return phone;
+}
+
+// Função para envio em lote (abre múltiplas abas)
+export function sendBulkWhatsAppMessages(contacts) {
+  contacts.forEach((contact, index) => {
+    setTimeout(() => {
+      sendWhatsAppMessage(contact.phone, contact.message);
+    }, index * 1000); // Delay de 1 segundo entre cada abertura
+  });
 }

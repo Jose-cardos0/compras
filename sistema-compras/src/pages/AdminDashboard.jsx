@@ -18,6 +18,9 @@ import {
   Users,
   Filter,
   X,
+  ChevronDown,
+  ChevronRight,
+  PackageOpen,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -26,12 +29,21 @@ const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [statusModal, setStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState("");
   const [additionalData, setAdditionalData] = useState({});
   const [filterStatus, setFilterStatus] = useState("");
+  const [expandedOrders, setExpandedOrders] = useState(new Set());
+  const [isProductUpdate, setIsProductUpdate] = useState(false);
 
-  const { currentUser, logout } = useAuth();
+  const {
+    currentUser,
+    logout,
+    getAllowedStatuses,
+    canChangeStatus,
+    userPermissions,
+  } = useAuth();
   const navigate = useNavigate();
 
   const statusConfig = {
@@ -58,31 +70,131 @@ const AdminDashboard = () => {
   const handleStatusUpdate = async () => {
     if (!selectedOrder || !newStatus) return;
 
+    // Verificar permissões
+    if (!canChangeStatus(newStatus)) {
+      toast.error("Você não tem permissão para alterar para este status!");
+      return;
+    }
+
     try {
-      await ordersService.updateOrderStatus(
-        selectedOrder.id,
-        newStatus,
-        additionalData
-      );
-      toast.success("Status atualizado com sucesso!");
+      let result;
+
+      if (isProductUpdate && selectedProduct) {
+        // Atualizar status de produto individual
+        result = await ordersService.updateProductStatus(
+          selectedOrder.id,
+          selectedProduct.id,
+          newStatus,
+          additionalData
+        );
+      } else {
+        // Atualizar status geral do pedido
+        result = await ordersService.updateOrderStatus(
+          selectedOrder.id,
+          newStatus,
+          additionalData
+        );
+      }
+
+      // Tratar resultado do WhatsApp
+      if (result && result.success) {
+        toast.success(
+          <div className="text-sm">
+            <p className="font-semibold mb-2">
+              {isProductUpdate ? "Produto" : "Pedido"} atualizado! WhatsApp
+              aberto automaticamente!
+            </p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(result.whatsappLink);
+                toast.success("Link copiado!", { duration: 2000 });
+              }}
+              className="text-blue-600 hover:text-blue-800 underline text-xs"
+            >
+              📋 Clique para copiar o link
+            </button>
+          </div>,
+          { duration: 8000 }
+        );
+      } else if (result && !result.success) {
+        toast.error(
+          <div className="text-sm">
+            <p className="font-semibold mb-2">
+              {isProductUpdate ? "Produto" : "Pedido"} atualizado! Erro ao abrir
+              WhatsApp automaticamente
+            </p>
+            <a
+              href={result.whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline text-xs"
+            >
+              🔗 Clique aqui para abrir WhatsApp
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(
+          `${isProductUpdate ? "Produto" : "Pedido"} atualizado com sucesso!`
+        );
+      }
+
       setStatusModal(false);
       setSelectedOrder(null);
+      setSelectedProduct(null);
       setNewStatus("");
       setAdditionalData({});
+      setIsProductUpdate(false);
     } catch (error) {
       console.error("Erro ao atualizar status:", error);
       toast.error("Erro ao atualizar status");
     }
   };
 
-  const openStatusModal = (order) => {
+  const openStatusModal = (order, product = null) => {
     setSelectedOrder(order);
-    setNewStatus(order.status);
+    setSelectedProduct(product);
+    setIsProductUpdate(!!product);
+    setNewStatus(product ? product.status : order.status);
     setStatusModal(true);
   };
 
+  const toggleExpandOrder = (orderId) => {
+    setExpandedOrders((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId);
+      } else {
+        newSet.add(orderId);
+      }
+      return newSet;
+    });
+  };
+
+  const getOrderStatus = (order) => {
+    if (!order.produtos || order.produtos.length === 0) {
+      return order.status || "pendente";
+    }
+
+    // Verificar status dos produtos
+    const productStatuses = order.produtos.map((p) => p.status);
+    const uniqueStatuses = [...new Set(productStatuses)];
+
+    if (uniqueStatuses.length === 1) {
+      return uniqueStatuses[0]; // Todos produtos têm o mesmo status
+    }
+
+    // Status mistos - priorizar por ordem de importância
+    if (productStatuses.includes("cancelado")) return "cancelado";
+    if (productStatuses.includes("entregue")) return "em_andamento"; // Alguns entregues
+    if (productStatuses.includes("em_andamento")) return "em_andamento";
+    if (productStatuses.includes("em_analise")) return "em_analise";
+    return "pendente";
+  };
+
   const filteredOrders = filterStatus
-    ? orders.filter((order) => order.status === filterStatus)
+    ? orders.filter((order) => getOrderStatus(order) === filterStatus)
     : orders;
 
   const formatDate = (timestamp) => {
@@ -99,6 +211,10 @@ const AdminDashboard = () => {
     await logout();
     navigate("/admin/login");
   };
+
+  // Verificar se usuário pode gerenciar usuários
+  const canManageUsers =
+    userPermissions?.canManageUsers || userPermissions?.isMainAdmin;
 
   if (loading) {
     return (
@@ -128,13 +244,15 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate("/admin/users")}
-                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Users className="h-5 w-5" />
-                <span>Gerenciar Usuários</span>
-              </button>
+              {canManageUsers && (
+                <button
+                  onClick={() => navigate("/admin/users")}
+                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Users className="h-5 w-5" />
+                  <span>Gerenciar Usuários</span>
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
@@ -152,7 +270,7 @@ const AdminDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {Object.entries(statusConfig).map(([status, config]) => {
             const count = orders.filter(
-              (order) => order.status === status
+              (order) => getOrderStatus(order) === status
             ).length;
             const Icon = config.icon;
             return (
@@ -177,6 +295,24 @@ const AdminDashboard = () => {
             );
           })}
         </div>
+
+        {/* Informações de Permissões */}
+        {!userPermissions?.isMainAdmin && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              <h3 className="text-sm font-semibold text-blue-800">
+                Suas Permissões:
+              </h3>
+            </div>
+            <p className="text-sm text-blue-700 mt-1">
+              Você pode alterar status para:{" "}
+              {getAllowedStatuses()
+                .map((s) => s.label)
+                .join(", ")}
+            </p>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
@@ -223,8 +359,11 @@ const AdminDashboard = () => {
           ) : (
             <div className="grid gap-6">
               {filteredOrders.map((order, index) => {
-                const statusInfo = statusConfig[order.status];
+                const orderStatus = getOrderStatus(order);
+                const statusInfo = statusConfig[orderStatus];
                 const StatusIcon = statusInfo.icon;
+                const isExpanded = expandedOrders.has(order.id);
+                const hasProducts = order.produtos && order.produtos.length > 0;
 
                 return (
                   <motion.div
@@ -242,20 +381,39 @@ const AdminDashboard = () => {
                           </div>
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900">
-                              {order.produto}
+                              {hasProducts
+                                ? `Pedido com ${order.produtos.length} produto${
+                                    order.produtos.length > 1 ? "s" : ""
+                                  }`
+                                : order.produto || "Pedido"}
                             </h3>
                             <p className="text-sm text-gray-600">
                               por {order.nomeCompleto}
                             </p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => openStatusModal(order)}
-                          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                          <span>Editar Status</span>
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          {hasProducts && (
+                            <button
+                              onClick={() => toggleExpandOrder(order.id)}
+                              className="flex items-center space-x-2 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                              <span>Produtos</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openStatusModal(order)}
+                            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                            <span>Status Geral</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
@@ -285,46 +443,135 @@ const AdminDashboard = () => {
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        <div>
-                          <h4 className="font-medium text-gray-900 mb-1">
-                            Especificações:
+                      {/* Lista de Produtos Expandida */}
+                      {hasProducts && isExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="border-t border-gray-200 pt-4 mt-4"
+                        >
+                          <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                            <PackageOpen className="h-5 w-5 mr-2 text-purple-600" />
+                            Produtos do Pedido
                           </h4>
-                          <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
-                            {order.especificacoes}
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900 mb-1">
-                            Motivo:
-                          </h4>
-                          <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
-                            {order.motivo}
-                          </p>
-                        </div>
+                          <div className="space-y-4">
+                            {order.produtos.map((produto, prodIndex) => {
+                              const prodStatusInfo =
+                                statusConfig[produto.status];
+                              const ProdStatusIcon = prodStatusInfo.icon;
+                              return (
+                                <div
+                                  key={produto.id}
+                                  className="bg-gray-50 p-4 rounded-lg border border-gray-200"
+                                >
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center space-x-3">
+                                      <div
+                                        className={`${prodStatusInfo.color} p-2 rounded-lg`}
+                                      >
+                                        <ProdStatusIcon className="h-4 w-4 text-white" />
+                                      </div>
+                                      <div>
+                                        <h5 className="font-semibold text-gray-900">
+                                          {produto.produto}
+                                        </h5>
+                                        <p className="text-sm text-gray-600">
+                                          Status: {prodStatusInfo.label}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        openStatusModal(order, produto)
+                                      }
+                                      className="flex items-center space-x-2 bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                      <span>Alterar</span>
+                                    </button>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div>
+                                      <p className="text-xs font-medium text-gray-700 mb-1">
+                                        Especificações:
+                                      </p>
+                                      <p className="text-sm text-gray-600 bg-white p-2 rounded">
+                                        {produto.especificacoes}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-gray-700 mb-1">
+                                        Motivo:
+                                      </p>
+                                      <p className="text-sm text-gray-600 bg-white p-2 rounded">
+                                        {produto.motivo}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
 
-                        {order.dataPrevisao && (
+                      {/* Informações antigas do produto único (compatibilidade) */}
+                      {!hasProducts && order.produto && (
+                        <div className="space-y-3">
                           <div>
                             <h4 className="font-medium text-gray-900 mb-1">
-                              Data Prevista:
+                              Produto:
                             </h4>
-                            <p className="text-sm text-green-700 font-medium">
-                              {order.dataPrevisao}
+                            <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                              {order.produto}
                             </p>
                           </div>
-                        )}
+                          {order.especificacoes && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-1">
+                                Especificações:
+                              </h4>
+                              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                                {order.especificacoes}
+                              </p>
+                            </div>
+                          )}
+                          {order.motivo && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-1">
+                                Motivo:
+                              </h4>
+                              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                                {order.motivo}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                        {order.motivoCancelamento && (
-                          <div>
-                            <h4 className="font-medium text-gray-900 mb-1">
-                              Motivo do Cancelamento:
-                            </h4>
-                            <p className="text-sm text-red-700 bg-red-50 p-3 rounded-lg">
-                              {order.motivoCancelamento}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                      {/* Informações adicionais */}
+                      {order.dataPrevisao && (
+                        <div className="mt-3">
+                          <h4 className="font-medium text-gray-900 mb-1">
+                            Data Prevista:
+                          </h4>
+                          <p className="text-sm text-green-700 font-medium">
+                            {order.dataPrevisao}
+                          </p>
+                        </div>
+                      )}
+
+                      {order.motivoCancelamento && (
+                        <div className="mt-3">
+                          <h4 className="font-medium text-gray-900 mb-1">
+                            Motivo do Cancelamento:
+                          </h4>
+                          <p className="text-sm text-red-700 bg-red-50 p-3 rounded-lg">
+                            {order.motivoCancelamento}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -351,7 +598,9 @@ const AdminDashboard = () => {
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-semibold text-gray-900">
-                  Atualizar Status
+                  {isProductUpdate
+                    ? "Atualizar Status do Produto"
+                    : "Atualizar Status do Pedido"}
                 </h3>
                 <button
                   onClick={() => setStatusModal(false)}
@@ -360,6 +609,14 @@ const AdminDashboard = () => {
                   <X className="h-6 w-6" />
                 </button>
               </div>
+
+              {isProductUpdate && selectedProduct && (
+                <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-sm font-medium text-purple-800">
+                    Produto: {selectedProduct.produto}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div>
@@ -371,12 +628,17 @@ const AdminDashboard = () => {
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    {Object.entries(statusConfig).map(([status, config]) => (
-                      <option key={status} value={status}>
-                        {config.label}
+                    {getAllowedStatuses().map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
                       </option>
                     ))}
                   </select>
+                  {getAllowedStatuses().length === 0 && (
+                    <p className="text-red-500 text-sm mt-1">
+                      Você não tem permissão para alterar status.
+                    </p>
+                  )}
                 </div>
 
                 {newStatus === "em_andamento" && (
@@ -428,7 +690,8 @@ const AdminDashboard = () => {
                 </button>
                 <button
                   onClick={handleStatusUpdate}
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={getAllowedStatuses().length === 0}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Atualizar
                 </button>

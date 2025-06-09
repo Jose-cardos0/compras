@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import {
   Package,
   User,
@@ -10,18 +11,32 @@ import {
   MessageSquare,
   Phone,
   Send,
+  Shield,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { ordersService } from "../services/firestore";
 import { validatePhoneNumber, formatPhoneNumber } from "../services/whatsapp";
 
 const OrderForm = () => {
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm();
+    control,
+  } = useForm({
+    defaultValues: {
+      produtos: [{ produto: "", especificacoes: "", motivo: "" }], // Pelo menos 1 produto
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "produtos",
+  });
 
   const setorOptions = [
     "Máquinas Industriais",
@@ -34,6 +49,18 @@ const OrderForm = () => {
     "Outro",
   ];
 
+  const addProduct = () => {
+    append({ produto: "", especificacoes: "", motivo: "" });
+  };
+
+  const removeProduct = (index) => {
+    if (fields.length > 1) {
+      remove(index);
+    } else {
+      toast.error("Deve haver pelo menos 1 produto!");
+    }
+  };
+
   const onSubmit = async (data) => {
     setLoading(true);
     try {
@@ -44,18 +71,67 @@ const OrderForm = () => {
         return;
       }
 
+      // Validar se todos os produtos estão preenchidos
+      const produtosValidos = data.produtos.every(
+        (produto) =>
+          produto.produto.trim() &&
+          produto.especificacoes.trim() &&
+          produto.motivo.trim()
+      );
+
+      if (!produtosValidos) {
+        toast.error("Todos os produtos devem estar preenchidos completamente!");
+        setLoading(false);
+        return;
+      }
+
       const formattedData = {
         ...data,
         whatsapp: formatPhoneNumber(data.whatsapp),
-        // Se o setor for "Outro", usar o valor digitado
         setorDestino:
           data.setorDestino === "Outro" ? data.setorOutro : data.setorDestino,
+        // Adicionar status individual para cada produto
+        produtos: data.produtos.map((produto, index) => ({
+          ...produto,
+          id: `produto_${Date.now()}_${index}`,
+          status: "pendente", // Status individual do produto
+        })),
       };
 
-      await ordersService.createOrder(formattedData);
-      toast.success(
-        "Pedido enviado com sucesso! Você receberá atualizações no WhatsApp."
-      );
+      const result = await ordersService.createOrder(formattedData);
+
+      if (result.whatsappResult && result.whatsappResult.success) {
+        toast.success(
+          <div className="text-sm">
+            <p className="font-semibold mb-2">
+              Pedido enviado com sucesso! WhatsApp aberto automaticamente!
+            </p>
+            <p className="text-gray-600 text-xs mb-2">
+              {data.produtos.length} produto(s) incluído(s) no pedido
+            </p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  result.whatsappResult.whatsappURL
+                );
+                toast.success("Link copiado!", { duration: 2000 });
+              }}
+              className="text-blue-600 hover:text-blue-800 underline text-xs"
+            >
+              📋 Clique para copiar o link do WhatsApp
+            </button>
+            <p className="text-gray-600 text-xs mt-1">
+              Você receberá atualizações sobre cada produto via WhatsApp.
+            </p>
+          </div>,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(
+          `Pedido com ${data.produtos.length} produto(s) enviado com sucesso! Você receberá atualizações no WhatsApp.`
+        );
+      }
+
       reset();
     } catch (error) {
       console.error("Erro ao enviar pedido:", error);
@@ -70,12 +146,28 @@ const OrderForm = () => {
       {/* Header com Logo */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center py-6">
-            <img
-              src="https://i.ibb.co/DPCKjMYN/2024.webp"
-              alt="Logo da Empresa"
-              className="h-16 w-auto"
-            />
+          <div className="flex items-center justify-between py-6">
+            {/* Logo centralizada */}
+            <div className="flex-1 flex justify-center">
+              <img
+                src="https://i.ibb.co/DPCKjMYN/2024.webp"
+                alt="Logo da Empresa"
+                className="h-16 w-auto"
+              />
+            </div>
+
+            {/* Botão Admin no canto direito */}
+            <div className="absolute right-4">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate("/admin/login")}
+                className="flex items-center space-x-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg shadow-md transition-all duration-200"
+              >
+                <Shield className="h-4 w-4" />
+                <span className="text-sm font-medium">Admin</span>
+              </motion.button>
+            </div>
           </div>
         </div>
       </div>
@@ -175,72 +267,118 @@ const OrderForm = () => {
               </div>
             </motion.div>
 
-            {/* Informações do Produto */}
+            {/* Lista de Produtos */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
               className="space-y-6"
             >
-              <div className="flex items-center space-x-3 mb-6">
-                <Package className="h-6 w-6 text-purple-600" />
-                <h2 className="text-2xl font-semibold text-gray-800">
-                  Informações do Produto
-                </h2>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <Package className="h-6 w-6 text-purple-600" />
+                  <h2 className="text-2xl font-semibold text-gray-800">
+                    Lista de Produtos ({fields.length})
+                  </h2>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={addProduct}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Adicionar Produto</span>
+                </motion.button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Produto Desejado *
-                </label>
-                <input
-                  {...register("produto", {
-                    required: "Produto é obrigatório",
-                  })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Digite o produto que deseja"
-                />
-                {errors.produto && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.produto.message}
-                  </p>
-                )}
-              </div>
+              {/* Produtos Dinâmicos */}
+              <div className="space-y-6">
+                {fields.map((field, index) => (
+                  <motion.div
+                    key={field.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        Produto {index + 1}
+                      </h3>
+                      {fields.length > 1 && (
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          type="button"
+                          onClick={() => removeProduct(index)}
+                          className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </motion.button>
+                      )}
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Especificações Técnicas *
-                </label>
-                <textarea
-                  {...register("especificacoes", {
-                    required: "Especificações são obrigatórias",
-                  })}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Descreva as especificações técnicas do produto..."
-                />
-                {errors.especificacoes && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.especificacoes.message}
-                  </p>
-                )}
-              </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Nome do Produto *
+                        </label>
+                        <input
+                          {...register(`produtos.${index}.produto`, {
+                            required: "Nome do produto é obrigatório",
+                          })}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                          placeholder="Digite o nome do produto"
+                        />
+                        {errors.produtos?.[index]?.produto && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {errors.produtos[index].produto.message}
+                          </p>
+                        )}
+                      </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Motivo da Solicitação *
-                </label>
-                <textarea
-                  {...register("motivo", { required: "Motivo é obrigatório" })}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Explique o motivo da solicitação..."
-                />
-                {errors.motivo && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.motivo.message}
-                  </p>
-                )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Especificações Técnicas *
+                        </label>
+                        <textarea
+                          {...register(`produtos.${index}.especificacoes`, {
+                            required: "Especificações são obrigatórias",
+                          })}
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                          placeholder="Descreva as especificações técnicas..."
+                        />
+                        {errors.produtos?.[index]?.especificacoes && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {errors.produtos[index].especificacoes.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Motivo da Solicitação *
+                        </label>
+                        <textarea
+                          {...register(`produtos.${index}.motivo`, {
+                            required: "Motivo é obrigatório",
+                          })}
+                          rows={2}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                          placeholder="Explique o motivo da solicitação..."
+                        />
+                        {errors.produtos?.[index]?.motivo && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {errors.produtos[index].motivo.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </motion.div>
 
@@ -260,7 +398,7 @@ const OrderForm = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Para qual setor será o produto? *
+                  Para qual setor serão os produtos? *
                 </label>
                 <select
                   {...register("setorDestino", {
@@ -312,7 +450,10 @@ const OrderForm = () => {
                 ) : (
                   <>
                     <Send className="h-5 w-5" />
-                    <span>Enviar Pedido</span>
+                    <span>
+                      Enviar Pedido ({fields.length} produto
+                      {fields.length > 1 ? "s" : ""})
+                    </span>
                   </>
                 )}
               </button>

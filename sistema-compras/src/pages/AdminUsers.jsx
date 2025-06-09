@@ -14,6 +14,8 @@ import {
   Shield,
   X,
   Plus,
+  CheckCircle,
+  Settings,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +25,9 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [canManageUsers, setCanManageUsers] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -30,7 +35,7 @@ const AdminUsers = () => {
     reset,
   } = useForm();
 
-  const { currentUser } = useAuth();
+  const { currentUser, availableStatuses, userPermissions } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,10 +56,18 @@ const AdminUsers = () => {
 
   const onSubmit = async (data) => {
     try {
-      await usersService.createUser(data);
+      const userData = {
+        ...data,
+        allowedStatuses: selectedPermissions,
+        canManageUsers: canManageUsers,
+      };
+
+      await usersService.createUser(userData);
       toast.success("Usuário criado com sucesso!");
       setShowCreateModal(false);
       reset();
+      setSelectedPermissions([]);
+      setCanManageUsers(false);
       loadUsers();
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
@@ -74,6 +87,16 @@ const AdminUsers = () => {
     }
   };
 
+  const togglePermission = (statusValue) => {
+    setSelectedPermissions((prev) => {
+      if (prev.includes(statusValue)) {
+        return prev.filter((p) => p !== statusValue);
+      } else {
+        return [...prev, statusValue];
+      }
+    });
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return "Data não disponível";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -83,6 +106,42 @@ const AdminUsers = () => {
       date.toLocaleTimeString("pt-BR")
     );
   };
+
+  const formatPermissions = (allowedStatuses) => {
+    if (!allowedStatuses || allowedStatuses.length === 0) {
+      return "Nenhuma permissão";
+    }
+
+    const statusLabels = allowedStatuses.map((status) => {
+      const statusConfig = availableStatuses.find((s) => s.value === status);
+      return statusConfig ? statusConfig.label : status;
+    });
+
+    return statusLabels.join(", ");
+  };
+
+  // Verificar se usuário atual pode gerenciar usuários
+  if (!userPermissions?.canManageUsers && !userPermissions?.isMainAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-600 mb-2">
+            Acesso Negado
+          </h2>
+          <p className="text-gray-500 mb-4">
+            Você não tem permissão para gerenciar usuários.
+          </p>
+          <button
+            onClick={() => navigate("/admin/dashboard")}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Voltar ao Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -118,7 +177,7 @@ const AdminUsers = () => {
                   Gerenciamento de Usuários
                 </h1>
                 <p className="text-gray-600">
-                  Cadastre e gerencie administradores
+                  Cadastre e gerencie administradores com permissões
                 </p>
               </div>
             </div>
@@ -185,14 +244,18 @@ const AdminUsers = () => {
           >
             <div className="flex items-center">
               <div className="bg-purple-500 p-3 rounded-lg">
-                <UserPlus className="h-6 w-6 text-white" />
+                <Settings className="h-6 w-6 text-white" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">
-                  Usuários Ativos
+                  Com Permissões
                 </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {users.length}
+                  {
+                    users.filter(
+                      (u) => u.allowedStatuses && u.allowedStatuses.length > 0
+                    ).length
+                  }
                 </p>
               </div>
             </div>
@@ -239,11 +302,11 @@ const AdminUsers = () => {
                       <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-lg">
                         <User className="h-6 w-6 text-white" />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">
                           {user.name}
                         </h3>
-                        <div className="flex items-center space-x-4 mt-1">
+                        <div className="flex items-center space-x-4 mt-1 flex-wrap">
                           <div className="flex items-center space-x-1">
                             <Mail className="h-4 w-4 text-gray-500" />
                             <span className="text-sm text-gray-600">
@@ -262,6 +325,19 @@ const AdminUsers = () => {
                               {formatDate(user.createdAt)}
                             </span>
                           </div>
+                        </div>
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500 mb-1">
+                            Permissões:
+                          </p>
+                          <p className="text-sm text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                            {formatPermissions(user.allowedStatuses)}
+                          </p>
+                          {user.canManageUsers && (
+                            <p className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded mt-1">
+                              Pode gerenciar usuários
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -294,7 +370,7 @@ const AdminUsers = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-semibold text-gray-900">
@@ -304,6 +380,8 @@ const AdminUsers = () => {
                   onClick={() => {
                     setShowCreateModal(false);
                     reset();
+                    setSelectedPermissions([]);
+                    setCanManageUsers(false);
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -311,44 +389,47 @@ const AdminUsers = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nome Completo
-                  </label>
-                  <input
-                    {...register("name", { required: "Nome é obrigatório" })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Digite o nome completo"
-                  />
-                  {errors.name && (
-                    <p className="text-red-500 text-sm mt-1">
-                      {errors.name.message}
-                    </p>
-                  )}
-                </div>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                {/* Informações Básicas */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nome Completo
+                    </label>
+                    <input
+                      {...register("name", { required: "Nome é obrigatório" })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Digite o nome completo"
+                    />
+                    {errors.name && (
+                      <p className="text-red-500 text-sm mt-1">
+                        {errors.name.message}
+                      </p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email
-                  </label>
-                  <input
-                    {...register("email", {
-                      required: "Email é obrigatório",
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: "Email inválido",
-                      },
-                    })}
-                    type="email"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="admin@exemplo.com"
-                  />
-                  {errors.email && (
-                    <p className="text-red-500 text-sm mt-1">
-                      {errors.email.message}
-                    </p>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email
+                    </label>
+                    <input
+                      {...register("email", {
+                        required: "Email é obrigatório",
+                        pattern: {
+                          value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                          message: "Email inválido",
+                        },
+                      })}
+                      type="email"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="admin@exemplo.com"
+                    />
+                    {errors.email && (
+                      <p className="text-red-500 text-sm mt-1">
+                        {errors.email.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -374,12 +455,67 @@ const AdminUsers = () => {
                   )}
                 </div>
 
+                {/* Permissões de Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Permissões de Status - Quais status este usuário pode
+                    alterar?
+                  </label>
+                  <div className="grid grid-cols-1 gap-3 bg-gray-50 p-4 rounded-lg">
+                    {availableStatuses.map((status) => (
+                      <label
+                        key={status.value}
+                        className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPermissions.includes(status.value)}
+                          onChange={() => togglePermission(status.value)}
+                          className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {status.label}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+
+                    {selectedPermissions.length === 0 && (
+                      <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
+                        ⚠️ Usuário não poderá alterar nenhum status!
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Permissão de Gerenciar Usuários */}
+                <div>
+                  <label className="flex items-center space-x-3 cursor-pointer bg-blue-50 p-3 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={canManageUsers}
+                      onChange={(e) => setCanManageUsers(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Pode gerenciar outros usuários
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
                 <div className="flex space-x-3 mt-6">
                   <button
                     type="button"
                     onClick={() => {
                       setShowCreateModal(false);
                       reset();
+                      setSelectedPermissions([]);
+                      setCanManageUsers(false);
                     }}
                     className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
                   >
