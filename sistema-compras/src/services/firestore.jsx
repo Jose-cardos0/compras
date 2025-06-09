@@ -15,6 +15,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { sendWhatsAppMessage, generateWhatsAppLink } from "./whatsapp";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "../firebase/config";
 
 // Serviços para Pedidos
 export const ordersService = {
@@ -293,16 +298,39 @@ export const ordersService = {
 // Serviços para Usuários Admin
 export const usersService = {
   // Criar novo usuário admin
-  async createUser(userData) {
+  async createUser(userData, masterCredentials) {
     try {
-      // Usar email como ID do documento para facilitar busca
+      // 1. Cria o usuário no Auth (isso desloga o master)
+      await createUserWithEmailAndPassword(
+        auth,
+        userData.email,
+        userData.password
+      );
+
+      // 2. Remove a senha antes de salvar no Firestore
+      const { password, ...userDataWithoutPassword } = userData;
+
+      // 3. Salva no Firestore
       const userRef = doc(db, "users", userData.email);
       await setDoc(userRef, {
-        ...userData,
+        ...userDataWithoutPassword,
         role: "admin",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // 4. Reloga o master, se as credenciais forem fornecidas
+      if (
+        masterCredentials &&
+        masterCredentials.email &&
+        masterCredentials.password
+      ) {
+        await signInWithEmailAndPassword(
+          auth,
+          masterCredentials.email,
+          masterCredentials.password
+        );
+      }
 
       return userData.email;
     } catch (error) {

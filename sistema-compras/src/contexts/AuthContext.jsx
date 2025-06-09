@@ -76,17 +76,10 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     try {
-      // Verificar se as credenciais são do admin principal
-      if (
-        email === adminCredentials.email &&
-        password === adminCredentials.password
-      ) {
-        const result = await signInWithEmailAndPassword(auth, email, password);
-        toast.success("Login realizado com sucesso!");
-        return result;
-      } else {
-        throw new Error("Credenciais inválidas");
-      }
+      // Permitir login de qualquer usuário cadastrado no Auth
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      toast.success("Login realizado com sucesso!");
+      return result;
     } catch (error) {
       console.error("Erro no login:", error);
       toast.error("Email ou senha incorretos");

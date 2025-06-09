@@ -62,7 +62,10 @@ const AdminUsers = () => {
         canManageUsers: canManageUsers,
       };
 
-      await usersService.createUser(userData);
+      await usersService.createUser(userData, {
+        email: currentUser.email,
+        password: "compras2025@",
+      });
       toast.success("Usuário criado com sucesso!");
       setShowCreateModal(false);
       reset();
