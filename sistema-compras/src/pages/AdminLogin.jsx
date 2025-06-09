@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Lock, Mail, Eye, EyeOff, Shield } from "lucide-react";
-import toast from "react-hot-toast";
+// import toast from "react-hot-toast";
 
 const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
