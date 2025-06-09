@@ -155,10 +155,6 @@ const AdminLogin = () => {
         >
           <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
             <p className="text-white/70 text-xs mb-2">Credenciais de Acesso:</p>
-            <p className="text-white/90 text-sm font-mono">
-              comprasnatville@gmail.com
-            </p>
-            <p className="text-white/90 text-sm font-mono">compras2025@</p>
           </div>
         </motion.div>
 
