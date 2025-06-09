@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   where,
   getDoc,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { sendWhatsAppMessage, generateWhatsAppLink } from "./whatsapp";
@@ -296,16 +297,12 @@ export const usersService = {
     try {
       // Usar email como ID do documento para facilitar busca
       const userRef = doc(db, "users", userData.email);
-      await updateDoc(
-        userRef,
-        {
-          ...userData,
-          role: "admin",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await setDoc(userRef, {
+        ...userData,
+        role: "admin",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
 
       return userData.email;
     } catch (error) {
