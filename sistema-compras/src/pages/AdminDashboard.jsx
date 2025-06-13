@@ -262,21 +262,21 @@ const AdminDashboard = () => {
                 alt="Logo da Empresa"
                 className="h-12 w-auto"
               />
-              <div>
+              <div className="max-md:hidden">
                 <h1 className="text-2xl font-bold text-gray-900">
                   Dashboard Administrativo
                 </h1>
                 <p className="text-gray-600">Gerencie os pedidos de compras</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 max-md:gap-2 max-md:space-x-0">
               {canManageUsers && (
                 <button
                   onClick={() => navigate("/admin/users")}
                   className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Users className="h-5 w-5" />
-                  <span>Gerenciar Usuários</span>
+                  <span className="max-md:hidden">Gerenciar Usuários</span>
                 </button>
               )}
               <button
@@ -284,14 +284,14 @@ const AdminDashboard = () => {
                 className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
               >
                 <Package className="h-5 w-5" />
-                <span>Ir para o form</span>
+                <span className="max-md:hidden">Ir para o form</span>
               </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
                 <LogOut className="h-5 w-5" />
-                <span>Sair</span>
+                <span className="max-md:text-xs">Sair</span>
               </button>
             </div>
           </div>
@@ -350,12 +350,12 @@ const AdminDashboard = () => {
         {/* Filtros */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 max-md:text-lg">
               Filtrar Pedidos
             </h2>
-            <div className="flex items-center space-x-4">
-              <Filter className="h-5 w-5 text-gray-500" />
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-4 ">
+              <Filter className="h-5 w-5 text-gray-500 max-md:hidden" />
+              <div className="flex items-center space-x-3 max-md:flex-col max-md:space-x-0 max-md:space-y-2">
                 <input
                   type="text"
                   placeholder="Buscar por ID..."
@@ -427,8 +427,8 @@ const AdminDashboard = () => {
                     transition={{ delay: index * 0.1 }}
                     className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-200"
                   >
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-4">
+                    <div className="p-6 ">
+                      <div className="flex items-start justify-between mb-4 max-md:flex-col max-md:space-y-2">
                         <div className="flex items-center space-x-3">
                           <div className={`${statusInfo.color} p-2 rounded-lg`}>
                             <StatusIcon className="h-5 w-5 text-white" />
