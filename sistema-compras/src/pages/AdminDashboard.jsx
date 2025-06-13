@@ -60,7 +60,7 @@ const AdminDashboard = () => {
       icon: Car,
     },
     cancelado: {
-      label: "Cancelado/Negado",
+      label: "Cancelado",
       color: "bg-red-500",
       icon: XCircle,
     },
@@ -300,7 +300,7 @@ const AdminDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
           {Object.entries(statusConfig).map(([status, config]) => {
             const count = orders.filter(
               (order) => getOrderStatus(order) === status
@@ -444,7 +444,8 @@ const AdminDashboard = () => {
                                     }`
                                   : order.produto || "Pedido"}
                               </h3>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
+                               font-medium bg-blue-100 text-blue-800">
                                 ID: {order.id.slice(-8).toUpperCase()}
                               </span>
                             </div>
