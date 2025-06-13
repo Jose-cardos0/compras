@@ -280,6 +280,13 @@ const AdminDashboard = () => {
                 </button>
               )}
               <button
+                onClick={() => navigate("/")}
+                className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Package className="h-5 w-5" />
+                <span>Ir para o form</span>
+              </button>
+              <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
