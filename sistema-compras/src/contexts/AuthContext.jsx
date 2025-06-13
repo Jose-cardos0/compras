@@ -34,6 +34,15 @@ export function AuthProvider({ children }) {
     { value: "entregue", label: "Entregue" },
   ];
 
+  // Definir fluxo de status - de qual status para qual status pode mudar
+  const statusWorkflow = {
+    pendente: ["em_analise", "cancelado"], // Pendente pode ir para Em Análise ou Cancelado
+    em_analise: ["em_andamento", "pendente", "cancelado"], // Em Análise pode ir para Em Andamento, voltar para Pendente ou Cancelado
+    em_andamento: ["entregue", "cancelado"], // Em Andamento pode ir para Entregue ou Cancelado
+    cancelado: [], // Cancelado não pode mudar para outro status
+    entregue: [], // Entregue não pode mudar para outro status
+  };
+
   // Carregar permissões do usuário do Firestore
   const loadUserPermissions = async (userEmail) => {
     try {
@@ -105,7 +114,43 @@ export function AuthProvider({ children }) {
     return userPermissions.allowedStatuses.includes(status);
   };
 
-  // Obter lista de status que o usuário pode usar
+  // Verificar se é possível mudar de um status para outro (considerando fluxo + permissões)
+  const canChangeStatusFrom = (currentStatus, newStatus) => {
+    if (!userPermissions) return false;
+
+    // Admin principal pode fazer qualquer mudança
+    if (userPermissions.isMainAdmin) return true;
+
+    // Verificar se tem permissão para o novo status
+    if (!userPermissions.allowedStatuses.includes(newStatus)) return false;
+
+    // Verificar se a transição é permitida pelo fluxo
+    const allowedTransitions = statusWorkflow[currentStatus] || [];
+    return allowedTransitions.includes(newStatus);
+  };
+
+  // Obter lista de status que o usuário pode usar baseado no status atual
+  const getAllowedStatusesFrom = (currentStatus) => {
+    if (!userPermissions) return [];
+
+    if (userPermissions.isMainAdmin) {
+      // Admin pode fazer qualquer transição permitida pelo fluxo
+      const allowedTransitions = statusWorkflow[currentStatus] || [];
+      return availableStatuses.filter((status) =>
+        allowedTransitions.includes(status.value)
+      );
+    }
+
+    // Para usuários normais, verificar permissões E fluxo
+    const allowedTransitions = statusWorkflow[currentStatus] || [];
+    return availableStatuses.filter(
+      (status) =>
+        userPermissions.allowedStatuses.includes(status.value) &&
+        allowedTransitions.includes(status.value)
+    );
+  };
+
+  // Obter lista de status que o usuário pode usar (função original mantida para compatibilidade)
   const getAllowedStatuses = () => {
     if (!userPermissions) return [];
     if (userPermissions.isMainAdmin) {
@@ -137,8 +182,11 @@ export function AuthProvider({ children }) {
     logout,
     loading,
     canChangeStatus,
+    canChangeStatusFrom,
     getAllowedStatuses,
+    getAllowedStatusesFrom,
     availableStatuses,
+    statusWorkflow,
     loadUserPermissions,
   };
 

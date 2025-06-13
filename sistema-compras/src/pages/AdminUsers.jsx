@@ -464,6 +464,33 @@ const AdminUsers = () => {
                     Permissões de Status - Quais status este usuário pode
                     alterar?
                   </label>
+
+                  {/* Explicação do fluxo de status */}
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-800 mb-2">
+                      📋 Fluxo de Status do Sistema:
+                    </h4>
+                    <div className="text-xs text-blue-700 space-y-1">
+                      <p>
+                        <strong>Pendente</strong> → Em Análise, Cancelado
+                      </p>
+                      <p>
+                        <strong>Em Análise</strong> → Em Andamento, Pendente,
+                        Cancelado
+                      </p>
+                      <p>
+                        <strong>Em Andamento</strong> → Entregue, Cancelado
+                      </p>
+                      <p>
+                        <strong>Cancelado/Entregue</strong> → Não pode ser
+                        alterado
+                      </p>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-2">
+                      ⚠️ Usuários só podem alterar status seguindo este fluxo!
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-3 bg-gray-50 p-4 rounded-lg">
                     {availableStatuses.map((status) => (
                       <label
@@ -489,6 +516,24 @@ const AdminUsers = () => {
                       <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
                         ⚠️ Usuário não poderá alterar nenhum status!
                       </p>
+                    )}
+
+                    {selectedPermissions.length > 0 && (
+                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded">
+                        <p className="text-xs text-green-700 font-medium mb-1">
+                          Permissões selecionadas:
+                        </p>
+                        <p className="text-xs text-green-600">
+                          {selectedPermissions
+                            .map((perm) => {
+                              const statusInfo = availableStatuses.find(
+                                (s) => s.value === perm
+                              );
+                              return statusInfo ? statusInfo.label : perm;
+                            })
+                            .join(", ")}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -21,6 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   PackageOpen,
+  Car,
+  Hourglass,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -34,6 +36,7 @@ const AdminDashboard = () => {
   const [newStatus, setNewStatus] = useState("");
   const [additionalData, setAdditionalData] = useState({});
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterById, setFilterById] = useState("");
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [isProductUpdate, setIsProductUpdate] = useState(false);
 
@@ -41,15 +44,21 @@ const AdminDashboard = () => {
     currentUser,
     logout,
     getAllowedStatuses,
+    getAllowedStatusesFrom,
     canChangeStatus,
+    canChangeStatusFrom,
     userPermissions,
   } = useAuth();
   const navigate = useNavigate();
 
   const statusConfig = {
     pendente: { label: "Pendente", color: "bg-yellow-500", icon: Clock },
-    em_analise: { label: "Em Análise", color: "bg-blue-500", icon: Play },
-    em_andamento: { label: "Em Andamento", color: "bg-purple-500", icon: Play },
+    em_analise: { label: "Em Análise", color: "bg-blue-500", icon: Hourglass },
+    em_andamento: {
+      label: "Em Andamento",
+      color: "bg-purple-500",
+      icon: Car,
+    },
     cancelado: {
       label: "Cancelado/Negado",
       color: "bg-red-500",
@@ -70,9 +79,17 @@ const AdminDashboard = () => {
   const handleStatusUpdate = async () => {
     if (!selectedOrder || !newStatus) return;
 
-    // Verificar permissões
-    if (!canChangeStatus(newStatus)) {
-      toast.error("Você não tem permissão para alterar para este status!");
+    // Obter status atual
+    const currentStatus =
+      isProductUpdate && selectedProduct
+        ? selectedProduct.status
+        : getOrderStatus(selectedOrder);
+
+    // Verificar permissões com base no fluxo de status
+    if (!canChangeStatusFrom(currentStatus, newStatus)) {
+      toast.error(
+        "Você não pode alterar para este status a partir do status atual!"
+      );
       return;
     }
 
@@ -156,7 +173,10 @@ const AdminDashboard = () => {
     setSelectedOrder(order);
     setSelectedProduct(product);
     setIsProductUpdate(!!product);
-    setNewStatus(product ? product.status : order.status);
+
+    // Definir status atual para determinar opções disponíveis
+    const currentStatus = product ? product.status : getOrderStatus(order);
+    setNewStatus(currentStatus);
     setStatusModal(true);
   };
 
@@ -193,9 +213,15 @@ const AdminDashboard = () => {
     return "pendente";
   };
 
-  const filteredOrders = filterStatus
-    ? orders.filter((order) => getOrderStatus(order) === filterStatus)
-    : orders;
+  const filteredOrders = orders.filter((order) => {
+    const matchesStatus = filterStatus
+      ? getOrderStatus(order) === filterStatus
+      : true;
+    const matchesId = filterById
+      ? order.id.toLowerCase().includes(filterById.toLowerCase())
+      : true;
+    return matchesStatus && matchesId;
+  });
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "Data não disponível";
@@ -322,18 +348,39 @@ const AdminDashboard = () => {
             </h2>
             <div className="flex items-center space-x-4">
               <Filter className="h-5 w-5 text-gray-500" />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Todos os Status</option>
-                {Object.entries(statusConfig).map(([status, config]) => (
-                  <option key={status} value={status}>
-                    {config.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="text"
+                  placeholder="Buscar por ID..."
+                  value={filterById}
+                  onChange={(e) => setFilterById(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48"
+                />
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Todos os Status</option>
+                  {Object.entries(statusConfig).map(([status, config]) => (
+                    <option key={status} value={status}>
+                      {config.label}
+                    </option>
+                  ))}
+                </select>
+                {(filterStatus || filterById) && (
+                  <button
+                    onClick={() => {
+                      setFilterStatus("");
+                      setFilterById("");
+                    }}
+                    className="flex items-center space-x-1 bg-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                    <span>Limpar</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -380,13 +427,20 @@ const AdminDashboard = () => {
                             <StatusIcon className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {hasProducts
-                                ? `Pedido com ${order.produtos.length} produto${
-                                    order.produtos.length > 1 ? "s" : ""
-                                  }`
-                                : order.produto || "Pedido"}
-                            </h3>
+                            <div className="flex items-center space-x-2 mb-1">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {hasProducts
+                                  ? `Pedido com ${
+                                      order.produtos.length
+                                    } produto${
+                                      order.produtos.length > 1 ? "s" : ""
+                                    }`
+                                  : order.produto || "Pedido"}
+                              </h3>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ID: {order.id.slice(-8).toUpperCase()}
+                              </span>
+                            </div>
                             <p className="text-sm text-gray-600">
                               por {order.nomeCompleto}
                             </p>
@@ -416,7 +470,13 @@ const AdminDashboard = () => {
                         </div>
                       </div>
 
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div className="flex items-center space-x-2">
+                          <Package className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-700">
+                            ID: {order.id.slice(-12).toUpperCase()}
+                          </span>
+                        </div>
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4 text-gray-500" />
                           <span className="text-sm text-gray-700">
@@ -623,22 +683,44 @@ const AdminDashboard = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Novo Status
                   </label>
+                  {selectedOrder && (
+                    <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-sm text-gray-600">
+                        <strong>Status atual:</strong>{" "}
+                        {isProductUpdate && selectedProduct
+                          ? statusConfig[selectedProduct.status]?.label
+                          : statusConfig[getOrderStatus(selectedOrder)]?.label}
+                      </p>
+                    </div>
+                  )}
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    {getAllowedStatuses().map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
+                    <option value="">Selecione um status</option>
+                    {selectedOrder &&
+                      getAllowedStatusesFrom(
+                        isProductUpdate && selectedProduct
+                          ? selectedProduct.status
+                          : getOrderStatus(selectedOrder)
+                      ).map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
                   </select>
-                  {getAllowedStatuses().length === 0 && (
-                    <p className="text-red-500 text-sm mt-1">
-                      Você não tem permissão para alterar status.
-                    </p>
-                  )}
+                  {selectedOrder &&
+                    getAllowedStatusesFrom(
+                      isProductUpdate && selectedProduct
+                        ? selectedProduct.status
+                        : getOrderStatus(selectedOrder)
+                    ).length === 0 && (
+                      <p className="text-red-500 text-sm mt-1">
+                        Não há transições de status disponíveis para o status
+                        atual.
+                      </p>
+                    )}
                 </div>
 
                 {newStatus === "em_andamento" && (
@@ -690,7 +772,14 @@ const AdminDashboard = () => {
                 </button>
                 <button
                   onClick={handleStatusUpdate}
-                  disabled={getAllowedStatuses().length === 0}
+                  disabled={
+                    selectedOrder &&
+                    getAllowedStatusesFrom(
+                      isProductUpdate && selectedProduct
+                        ? selectedProduct.status
+                        : getOrderStatus(selectedOrder)
+                    ).length === 0
+                  }
                   className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Atualizar
