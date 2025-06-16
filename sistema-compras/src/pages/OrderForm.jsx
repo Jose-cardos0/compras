@@ -39,14 +39,26 @@ const OrderForm = () => {
   });
 
   const setorOptions = [
-    "Máquinas Industriais",
-    "Frota",
     "Químicos",
-    "Estrutura da Empresa",
-    "Limpeza",
-    "Cozinha",
+    "Subestação",
     "Escritório",
-    "Outro",
+    "Pátio",
+    "Plataforma de Recepção",
+    "Empacotamento",
+    "Produção",
+    "Câmera Fria",
+    "Sala de Máquinas",
+    "Laboratório",
+    "Pasteurização",
+    "Encase UHT",
+    "FINAL DE LINHA (DES)",
+    "Expedição",
+    "Concentração",
+    "Secagem",
+    "Caldeira",
+    "ETE",
+    "Lavanderia",
+    "Almoxarifado",
   ];
 
   const addProduct = () => {
@@ -103,32 +115,34 @@ const OrderForm = () => {
       if (result.whatsappResult && result.whatsappResult.success) {
         toast.success(
           <div className="text-sm">
-            <p className="font-semibold mb-2">
-              Pedido enviado com sucesso! WhatsApp aberto automaticamente!
+            <p className="font-semibold mb-2">Pedido enviado com sucesso!</p>
+            <p className="text-gray-600 text-xs mb-2">
+              ID do Pedido:{" "}
+              <span className="font-mono font-bold text-blue-600">
+                {result.id.slice(-8).toUpperCase()}
+              </span>
             </p>
             <p className="text-gray-600 text-xs mb-2">
               {data.produtos.length} produto(s) incluído(s) no pedido
             </p>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(
-                  result.whatsappResult.whatsappURL
-                );
-                toast.success("Link copiado!", { duration: 2000 });
-              }}
-              className="text-blue-600 hover:text-blue-800 underline text-xs"
-            >
-              📋 Clique para copiar o link do WhatsApp
-            </button>
-            <p className="text-gray-600 text-xs mt-1">
-              Você receberá atualizações sobre cada produto via WhatsApp.
+            <p className="text-green-600 text-xs mb-2">
+              ✅ Administrador notificado via WhatsApp
+            </p>
+            <p className="text-blue-600 text-xs mt-1">
+              Você receberá atualizações sobre o status dos produtos via
+              WhatsApp.
+            </p>
+            <p className="text-amber-600 text-xs mt-1">
+              💡 Seu pedido apareceu no painel administrativo automaticamente.
             </p>
           </div>,
-          { duration: 10000 }
+          { duration: 8000 }
         );
       } else {
         toast.success(
-          `Pedido com ${data.produtos.length} produto(s) enviado com sucesso! Você receberá atualizações no WhatsApp.`
+          `Pedido ${result.id.slice(-8).toUpperCase()} com ${
+            data.produtos.length
+          } produto(s) enviado com sucesso! Admin notificado. Você receberá atualizações de status no WhatsApp.`
         );
       }
 

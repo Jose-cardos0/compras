@@ -39,6 +39,9 @@ const AdminDashboard = () => {
   const [filterById, setFilterById] = useState("");
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [isProductUpdate, setIsProductUpdate] = useState(false);
+  const [cancelModal, setCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [orderToCancel, setOrderToCancel] = useState(null);
 
   const {
     currentUser,
@@ -169,6 +172,46 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleCancelCompleteOrder = async () => {
+    if (!orderToCancel) return;
+
+    try {
+      const result = await ordersService.cancelCompleteOrder(
+        orderToCancel.id,
+        cancelReason
+      );
+
+      if (result && result.success) {
+        toast.success(
+          <div className="text-sm">
+            <p className="font-semibold mb-2">
+              Pedido cancelado completamente! Cliente notificado via WhatsApp!
+            </p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(result.result.whatsappLink);
+                toast.success("Link copiado!", { duration: 2000 });
+              }}
+              className="text-blue-600 hover:text-blue-800 underline text-xs"
+            >
+              📋 Clique para copiar o link
+            </button>
+          </div>,
+          { duration: 8000 }
+        );
+      } else {
+        toast.success("Pedido cancelado completamente!");
+      }
+
+      setCancelModal(false);
+      setOrderToCancel(null);
+      setCancelReason("");
+    } catch (error) {
+      console.error("Erro ao cancelar pedido:", error);
+      toast.error("Erro ao cancelar pedido completo");
+    }
+  };
+
   const openStatusModal = (order, product = null) => {
     setSelectedOrder(order);
     setSelectedProduct(product);
@@ -241,6 +284,11 @@ const AdminDashboard = () => {
   // Verificar se usuário pode gerenciar usuários
   const canManageUsers =
     userPermissions?.canManageUsers || userPermissions?.isMainAdmin;
+
+  const openCancelModal = (order) => {
+    setOrderToCancel(order);
+    setCancelModal(true);
+  };
 
   if (loading) {
     return (
@@ -435,7 +483,7 @@ const AdminDashboard = () => {
                           </div>
                           <div>
                             <div className="flex items-center space-x-2 mb-1">
-                              <h3 className="text-lg font-semibold text-gray-900">
+                              <h3 className="text-lg font-semibold text-gray-900 max-md:text-sm">
                                 {hasProducts
                                   ? `Pedido com ${
                                       order.produtos.length
@@ -444,8 +492,10 @@ const AdminDashboard = () => {
                                     }`
                                   : order.produto || "Pedido"}
                               </h3>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
-                               font-medium bg-blue-100 text-blue-800">
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
+                               font-medium bg-blue-100 text-blue-800 max-md:bg-white"
+                              >
                                 ID: {order.id.slice(-8).toUpperCase()}
                               </span>
                             </div>
@@ -470,11 +520,24 @@ const AdminDashboard = () => {
                           )}
                           <button
                             onClick={() => openStatusModal(order)}
-                            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex max-md:hidden items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                           >
                             <Edit3 className="h-4 w-4" />
                             <span>Status Geral</span>
                           </button>
+                          {/* Botão para cancelar pedido completo - só aparece se não estiver já cancelado */}
+                          {orderStatus !== "cancelado" &&
+                            userPermissions?.isMainAdmin && (
+                              <button
+                                onClick={() => openCancelModal(order)}
+                                className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                              >
+                                <XCircle className="h-4 w-4" />
+                                <span className="max-md:hidden">
+                                  Cancelar Pedido
+                                </span>
+                              </button>
+                            )}
                         </div>
                       </div>
 
@@ -791,6 +854,113 @@ const AdminDashboard = () => {
                   className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Atualizar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Cancelar Pedido Completo */}
+      <AnimatePresence>
+        {cancelModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  ⚠️ Cancelar Pedido Completo
+                </h3>
+                <button
+                  onClick={() => setCancelModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {orderToCancel && (
+                <div className="mb-6">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <XCircle className="h-5 w-5 text-red-600" />
+                      <h4 className="font-semibold text-red-800">
+                        Atenção! Esta ação é irreversível
+                      </h4>
+                    </div>
+                    <p className="text-sm text-red-700">
+                      Todos os produtos deste pedido serão cancelados,
+                      independente do status atual.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <h5 className="font-semibold text-gray-800 mb-2">
+                      Pedido: {orderToCancel.id.slice(-8).toUpperCase()}
+                    </h5>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Cliente: <strong>{orderToCancel.nomeCompleto}</strong>
+                    </p>
+                    {orderToCancel.produtos &&
+                    orderToCancel.produtos.length > 0 ? (
+                      <p className="text-sm text-gray-600">
+                        {orderToCancel.produtos.length} produto
+                        {orderToCancel.produtos.length > 1 ? "s" : ""} será
+                        {orderToCancel.produtos.length > 1 ? "ão" : ""}{" "}
+                        cancelado{orderToCancel.produtos.length > 1 ? "s" : ""}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        Produto: {orderToCancel.produto}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Motivo do Cancelamento *
+                  </label>
+                  <textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    rows={4}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder="Digite o motivo pelo qual está cancelando todo o pedido..."
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setCancelModal(false);
+                    setOrderToCancel(null);
+                    setCancelReason("");
+                  }}
+                  className="flex-1 max-md:hidden bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar Ação
+                </button>
+                <button
+                  onClick={handleCancelCompleteOrder}
+                  disabled={!cancelReason.trim()}
+                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  <XCircle className="h-4 w-4" />
+                  <span>Cancelar Pedido</span>
                 </button>
               </div>
             </motion.div>

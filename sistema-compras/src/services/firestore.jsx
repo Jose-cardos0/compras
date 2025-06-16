@@ -33,26 +33,37 @@ export const ordersService = {
         updatedAt: serverTimestamp(),
       });
 
-      // Criar mensagem do pedido baseada em produtos
-      let message = `🛒 *Pedido Criado!*\n\nOlá ${orderData.nomeCompleto}!\n\nSeu pedido foi recebido com sucesso!\n\n`;
+      // Criar mensagem específica para o ADMIN sobre novo pedido
+      let adminMessage = `🔔 *NOVO PEDIDO RECEBIDO!*\n\n`;
+      adminMessage += `*ID do Pedido:* ${docRef.id
+        .slice(-8)
+        .toUpperCase()}\n\n`;
+      adminMessage += `*Cliente:* ${orderData.nomeCompleto}\n`;
+      adminMessage += `*Setor:* ${orderData.setor}\n`;
+      adminMessage += `*WhatsApp:* ${orderData.whatsapp}\n`;
+      adminMessage += `*Setor Destino:* ${
+        orderData.setorDestino === "Outro"
+          ? orderData.setorOutro
+          : orderData.setorDestino
+      }\n\n`;
 
       if (orderData.produtos && orderData.produtos.length > 0) {
-        message += `*${orderData.produtos.length} Produto${
+        adminMessage += `*${orderData.produtos.length} Produto${
           orderData.produtos.length > 1 ? "s" : ""
-        } Incluído${orderData.produtos.length > 1 ? "s" : ""}:*\n\n`;
+        } Solicitado${orderData.produtos.length > 1 ? "s" : ""}:*\n\n`;
         orderData.produtos.forEach((produto, index) => {
-          message += `${index + 1}. *${
-            produto.produto
-          }*\n   Status: Pendente\n\n`;
+          adminMessage += `${index + 1}. *${produto.produto}*\n`;
+          adminMessage += `   Especificações: ${produto.especificacoes}\n`;
+          adminMessage += `   Motivo: ${produto.motivo}\n\n`;
         });
       } else if (orderData.produto) {
-        message += `*Produto:* ${orderData.produto}\n*Status:* Pendente\n\n`;
+        adminMessage += `*Produto:* ${orderData.produto}\n\n`;
       }
 
-      message += `Você receberá atualizações sobre o andamento de cada item do seu pedido.`;
+      adminMessage += `⚡ Acesse o painel administrativo para gerenciar este pedido.`;
 
-      // Enviar notificação de pedido criado
-      const result = await sendWhatsAppMessage(orderData.whatsapp, message);
+      // Enviar notificação automática para o ADMIN
+      const result = await sendWhatsAppMessage("79991820085", adminMessage);
 
       return {
         id: docRef.id,
@@ -292,6 +303,77 @@ export const ordersService = {
       }));
       callback(orders);
     });
+  },
+
+  // Função para cancelar pedido completo (todos os produtos)
+  async cancelCompleteOrder(orderId, motivoCancelamento = "") {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      const orderDoc = await getDoc(orderRef);
+
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      const orderData = orderDoc.data();
+
+      // Cancelar todos os produtos do pedido
+      let updatedProducts = [];
+      if (orderData.produtos && Array.isArray(orderData.produtos)) {
+        updatedProducts = orderData.produtos.map((produto) => ({
+          ...produto,
+          status: "cancelado",
+          motivoCancelamento: motivoCancelamento,
+          canceledAt: new Date(),
+        }));
+      }
+
+      // Atualizar no banco
+      await updateDoc(orderRef, {
+        status: "cancelado",
+        produtos: updatedProducts,
+        motivoCancelamento: motivoCancelamento,
+        canceledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Criar mensagem de notificação para o cliente
+      let message = `❌ *PEDIDO CANCELADO*\n\n`;
+      message += `*ID do Pedido:* ${orderId.slice(-8).toUpperCase()}\n\n`;
+      message += `Olá ${orderData.nomeCompleto}!\n\n`;
+      message += `Infelizmente seu pedido foi cancelado completamente.\n\n`;
+
+      if (orderData.produtos && orderData.produtos.length > 0) {
+        message += `*${orderData.produtos.length} Produto${
+          orderData.produtos.length > 1 ? "s" : ""
+        } Cancelado${orderData.produtos.length > 1 ? "s" : ""}:*\n\n`;
+        orderData.produtos.forEach((produto, index) => {
+          message += `${index + 1}. *${produto.produto}*\n`;
+        });
+        message += `\n`;
+      } else if (orderData.produto) {
+        message += `*Produto Cancelado:* ${orderData.produto}\n\n`;
+      }
+
+      if (motivoCancelamento) {
+        message += `*Motivo do Cancelamento:* ${motivoCancelamento}\n\n`;
+      }
+
+      message += `Para dúvidas, entre em contato conosco.`;
+
+      // Enviar notificação para o cliente
+      const result = await this.sendNotification(orderData.whatsapp, message);
+
+      return {
+        success: true,
+        result: result,
+        message: message,
+        orderId: orderId,
+      };
+    } catch (error) {
+      console.error("Erro ao cancelar pedido completo:", error);
+      throw error;
+    }
   },
 };
 

@@ -168,14 +168,14 @@ const AdminUsers = () => {
                 <ArrowLeft className="h-5 w-5" />
                 <span>Voltar ao Dashboard</span>
               </button>
-              <div className="border-l border-gray-300 pl-4">
+              <div className="border-l border-gray-300 pl-4 max-md:hidden">
                 <img
                   src="https://i.ibb.co/DPCKjMYN/2024.webp"
                   alt="Logo da Empresa"
                   className="h-12 w-auto"
                 />
               </div>
-              <div>
+              <div className="max-md:hidden">
                 <h1 className="text-2xl font-bold text-gray-900">
                   Gerenciamento de Usuários
                 </h1>
@@ -298,18 +298,18 @@ const AdminUsers = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="p-6 hover:bg-gray-50 transition-colors duration-150"
+                  className="p-6 hover:bg-gray-50 transition-colors duration-150 "
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-lg">
+                  <div className="flex items-center justify-between max-md:flex-col">
+                    <div className="flex items-center space-x-4 max-md:flex-col ">
+                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-lg max-md:mb-4">
                         <User className="h-6 w-6 text-white" />
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">
                           {user.name}
                         </h3>
-                        <div className="flex items-center space-x-4 mt-1 flex-wrap">
+                        <div className="flex items-center space-x-4 mt-1 flex-wrap max-md:flex-col max-md:items-start max-md:space-x-0">
                           <div className="flex items-center space-x-1">
                             <Mail className="h-4 w-4 text-gray-500" />
                             <span className="text-sm text-gray-600">
@@ -347,10 +347,11 @@ const AdminUsers = () => {
 
                     <button
                       onClick={() => setDeleteUserId(user.id)}
-                      className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                      className="flex items-center max-md:mt-4 max-md:ml-0 max-md:w-full max-md:justify-center
+                       space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
-                      <span>Deletar</span>
+                      <span className="">Deletar</span>
                     </button>
                   </div>
                 </motion.div>
