@@ -61,6 +61,7 @@ const OrderForm = () => {
     "ETE",
     "Lavanderia",
     "Almoxarifado",
+    "Outro",
   ];
 
   const addProduct = () => {
@@ -314,16 +315,16 @@ const OrderForm = () => {
               <AnimatePresence mode="popLayout">
                 <div className="space-y-6">
                   {fields.map((field, index) => (
-                    <motion.div
+                    <div
                       key={field.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{
-                        duration: 0.3,
-                        layout: { duration: 0.3 },
-                      }}
+                      // layout
+                      // initial={{ opacity: 0, scale: 0.95 }}
+                      // animate={{ opacity: 1, scale: 1 }}
+                      // exit={{ opacity: 0, scale: 0.95 }}
+                      // transition={{
+                      //   duration: 0.3,
+                      //   layout: { duration: 0.3 },
+                      // }}
                       className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-4">
@@ -425,7 +426,7 @@ const OrderForm = () => {
                           )}
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
               </AnimatePresence>
