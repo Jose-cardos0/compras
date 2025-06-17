@@ -625,6 +625,14 @@ const AdminDashboard = () => {
                                   <div className="space-y-2">
                                     <div>
                                       <p className="text-xs font-medium text-gray-700 mb-1">
+                                        Quantidade:
+                                      </p>
+                                      <p className="text-sm text-gray-600 bg-white p-2 rounded">
+                                        {produto.quantidade}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-gray-700 mb-1">
                                         Especificações:
                                       </p>
                                       <p className="text-sm text-gray-600 bg-white p-2 rounded">

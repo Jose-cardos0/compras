@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import {
@@ -29,7 +29,9 @@ const OrderForm = () => {
     control,
   } = useForm({
     defaultValues: {
-      produtos: [{ produto: "", especificacoes: "", motivo: "" }], // Pelo menos 1 produto
+      produtos: [
+        { produto: "", especificacoes: "", motivo: "", quantidade: 1 },
+      ], // Pelo menos 1 produto
     },
   });
 
@@ -62,7 +64,7 @@ const OrderForm = () => {
   ];
 
   const addProduct = () => {
-    append({ produto: "", especificacoes: "", motivo: "" });
+    append({ produto: "", especificacoes: "", motivo: "", quantidade: 1 });
   };
 
   const removeProduct = (index) => {
@@ -88,7 +90,8 @@ const OrderForm = () => {
         (produto) =>
           produto.produto.trim() &&
           produto.especificacoes.trim() &&
-          produto.motivo.trim()
+          produto.motivo.trim() &&
+          produto.quantidade > 0
       );
 
       if (!produtosValidos) {
@@ -308,92 +311,124 @@ const OrderForm = () => {
               </div>
 
               {/* Produtos Dinâmicos */}
-              <div className="space-y-6">
-                {fields.map((field, index) => (
-                  <motion.div
-                    key={field.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        Produto {index + 1}
-                      </h3>
-                      {fields.length > 1 && (
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          type="button"
-                          onClick={() => removeProduct(index)}
-                          className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </motion.button>
-                      )}
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Nome do Produto *
-                        </label>
-                        <input
-                          {...register(`produtos.${index}.produto`, {
-                            required: "Nome do produto é obrigatório",
-                          })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                          placeholder="Digite o nome do produto"
-                        />
-                        {errors.produtos?.[index]?.produto && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {errors.produtos[index].produto.message}
-                          </p>
+              <AnimatePresence mode="popLayout">
+                <div className="space-y-6">
+                  {fields.map((field, index) => (
+                    <motion.div
+                      key={field.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{
+                        duration: 0.3,
+                        layout: { duration: 0.3 },
+                      }}
+                      className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-800">
+                          Produto {index + 1}
+                        </h3>
+                        {fields.length > 1 && (
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            type="button"
+                            onClick={() => removeProduct(index)}
+                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-full transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </motion.button>
                         )}
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Especificações Técnicas *
-                        </label>
-                        <textarea
-                          {...register(`produtos.${index}.especificacoes`, {
-                            required: "Especificações são obrigatórias",
-                          })}
-                          rows={3}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                          placeholder="Descreva as especificações técnicas..."
-                        />
-                        {errors.produtos?.[index]?.especificacoes && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {errors.produtos[index].especificacoes.message}
-                          </p>
-                        )}
-                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nome do Produto *
+                          </label>
+                          <input
+                            {...register(`produtos.${index}.produto`, {
+                              required: "Nome do produto é obrigatório",
+                            })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                            placeholder="Digite o nome do produto"
+                          />
+                          {errors.produtos?.[index]?.produto && (
+                            <p className="text-red-500 text-sm mt-1">
+                              {errors.produtos[index].produto.message}
+                            </p>
+                          )}
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Motivo da Solicitação *
-                        </label>
-                        <textarea
-                          {...register(`produtos.${index}.motivo`, {
-                            required: "Motivo é obrigatório",
-                          })}
-                          rows={2}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                          placeholder="Explique o motivo da solicitação..."
-                        />
-                        {errors.produtos?.[index]?.motivo && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {errors.produtos[index].motivo.message}
-                          </p>
-                        )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Quantidade *
+                          </label>
+                          <input
+                            {...register(`produtos.${index}.quantidade`, {
+                              required: "Quantidade é obrigatória",
+                              min: {
+                                value: 1,
+                                message: "Quantidade deve ser pelo menos 1",
+                              },
+                              valueAsNumber: true,
+                            })}
+                            type="number"
+                            min="1"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                            placeholder="Ex: 5"
+                          />
+                          {errors.produtos?.[index]?.quantidade && (
+                            <p className="text-red-500 text-sm mt-1">
+                              {errors.produtos[index].quantidade.message}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Especificações Técnicas *
+                          </label>
+                          <textarea
+                            {...register(`produtos.${index}.especificacoes`, {
+                              required: "Especificações são obrigatórias",
+                            })}
+                            rows={3}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                            placeholder="Descreva as especificações técnicas..."
+                          />
+                          {errors.produtos?.[index]?.especificacoes && (
+                            <p className="text-red-500 text-sm mt-1">
+                              {errors.produtos[index].especificacoes.message}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Motivo da Solicitação *
+                          </label>
+                          <textarea
+                            {...register(`produtos.${index}.motivo`, {
+                              required: "Motivo é obrigatório",
+                            })}
+                            rows={2}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                            placeholder="Explique o motivo da solicitação..."
+                          />
+                          {errors.produtos?.[index]?.motivo && (
+                            <p className="text-red-500 text-sm mt-1">
+                              {errors.produtos[index].motivo.message}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </AnimatePresence>
             </motion.div>
 
             {/* Setor de Destino */}
