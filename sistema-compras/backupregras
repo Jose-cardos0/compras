@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permitir leitura e escrita apenas para usuários autenticados
+    match /orders/{document} {
+      allow read, write: if request.auth != null || resource == null;
+    }
+
+    match /users/{document} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+
+
+
+

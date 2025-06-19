@@ -14,12 +14,17 @@ import {
   Shield,
   Plus,
   Trash2,
+  Paperclip,
+  Image as ImageIcon,
 } from "lucide-react";
 import { ordersService } from "../services/firestore";
 import { validatePhoneNumber, formatPhoneNumber } from "../services/whatsapp";
+import FileUpload from "../components/FileUpload";
+import { storageService } from "../services/storage";
 
 const OrderForm = () => {
   const [loading, setLoading] = useState(false);
+  const [productFiles, setProductFiles] = useState({}); // Armazenar arquivos por produto
   const navigate = useNavigate();
   const {
     register,
@@ -71,9 +76,39 @@ const OrderForm = () => {
   const removeProduct = (index) => {
     if (fields.length > 1) {
       remove(index);
+      // Remover arquivos deste produto
+      const newProductFiles = { ...productFiles };
+      delete newProductFiles[index];
+      // Reajustar índices
+      const adjustedFiles = {};
+      Object.keys(newProductFiles).forEach((key) => {
+        const keyIndex = parseInt(key);
+        if (keyIndex > index) {
+          adjustedFiles[keyIndex - 1] = newProductFiles[key];
+        } else {
+          adjustedFiles[key] = newProductFiles[key];
+        }
+      });
+      setProductFiles(adjustedFiles);
     } else {
       toast.error("Deve haver pelo menos 1 produto!");
     }
+  };
+
+  const handleFilesSelected = (productIndex, files) => {
+    setProductFiles((prev) => ({
+      ...prev,
+      [productIndex]: files,
+    }));
+  };
+
+  const removeFileFromProduct = (productIndex, fileIndex) => {
+    setProductFiles((prev) => ({
+      ...prev,
+      [productIndex]:
+        prev[productIndex]?.filter((_, i) => i !== fileIndex) || [],
+    }));
+    toast.success("Arquivo removido");
   };
 
   const onSubmit = async (data) => {
@@ -101,21 +136,70 @@ const OrderForm = () => {
         return;
       }
 
+      const totalFiles = Object.values(productFiles).flat().length;
+
+      // Mostrar toast de progresso se há arquivos para enviar
+      if (totalFiles > 0) {
+        toast.loading(`Enviando pedido com ${totalFiles} arquivo(s)...`, {
+          id: "upload-progress",
+        });
+      }
+
+      // Gerar ID temporário para o pedido (para organizar arquivos)
+      const tempOrderId = `order_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      // 1. Fazer upload dos arquivos primeiro (se existirem)
+      const produtosComArquivos = await Promise.all(
+        data.produtos.map(async (produto, index) => {
+          const files = productFiles[index] || [];
+          let uploadedFiles = [];
+
+          if (files.length > 0) {
+            try {
+              // Fazer upload dos arquivos deste produto
+              const uploadResults = await storageService.uploadMultipleFiles(
+                files,
+                tempOrderId,
+                `produto_${index}`
+              );
+              uploadedFiles = uploadResults;
+            } catch (uploadError) {
+              console.error(
+                `Erro no upload dos arquivos do produto ${index + 1}:`,
+                uploadError
+              );
+              toast.error(`Erro ao enviar arquivos do produto ${index + 1}`);
+            }
+          }
+
+          return {
+            ...produto,
+            id: `produto_${Date.now()}_${index}`,
+            status: "pendente",
+            files: uploadedFiles,
+          };
+        })
+      );
+
+      // 2. Criar o pedido completo com todos os arquivos
       const formattedData = {
         ...data,
         whatsapp: formatPhoneNumber(data.whatsapp),
         setorDestino:
           data.setorDestino === "Outro" ? data.setorOutro : data.setorDestino,
-        // Adicionar status individual para cada produto
-        produtos: data.produtos.map((produto, index) => ({
-          ...produto,
-          id: `produto_${Date.now()}_${index}`,
-          status: "pendente", // Status individual do produto
-        })),
+        produtos: produtosComArquivos,
       };
 
       const result = await ordersService.createOrder(formattedData);
 
+      // Dismissar toast de progresso
+      if (totalFiles > 0) {
+        toast.dismiss("upload-progress");
+      }
+
+      // 3. Mostrar mensagem de sucesso
       if (result.whatsappResult && result.whatsappResult.success) {
         toast.success(
           <div className="text-sm">
@@ -129,6 +213,11 @@ const OrderForm = () => {
             <p className="text-gray-600 text-xs mb-2">
               {data.produtos.length} produto(s) incluído(s) no pedido
             </p>
+            {totalFiles > 0 && (
+              <p className="text-gray-600 text-xs mb-2">
+                📎 {totalFiles} arquivo(s) anexado(s) e enviado(s)
+              </p>
+            )}
             <p className="text-green-600 text-xs mb-2">
               ✅ Administrador notificado via WhatsApp
             </p>
@@ -146,13 +235,15 @@ const OrderForm = () => {
         toast.success(
           `Pedido ${result.id.slice(-8).toUpperCase()} com ${
             data.produtos.length
-          } produto(s) enviado com sucesso! Admin notificado. Você receberá atualizações de status no WhatsApp.`
+          } produto(s) e ${totalFiles} arquivo(s) enviado com sucesso! Admin notificado. Você receberá atualizações de status no WhatsApp.`
         );
       }
 
       reset();
+      setProductFiles({});
     } catch (error) {
       console.error("Erro ao enviar pedido:", error);
+      toast.dismiss("upload-progress");
       toast.error("Erro ao enviar pedido. Tente novamente.");
     } finally {
       setLoading(false);
@@ -317,14 +408,6 @@ const OrderForm = () => {
                   {fields.map((field, index) => (
                     <div
                       key={field.id}
-                      // layout
-                      // initial={{ opacity: 0, scale: 0.95 }}
-                      // animate={{ opacity: 1, scale: 1 }}
-                      // exit={{ opacity: 0, scale: 0.95 }}
-                      // transition={{
-                      //   duration: 0.3,
-                      //   layout: { duration: 0.3 },
-                      // }}
                       className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-4">
@@ -425,6 +508,73 @@ const OrderForm = () => {
                             </p>
                           )}
                         </div>
+
+                        {/* Seção de Upload de Arquivos */}
+                        <div className="border-t border-gray-200 pt-4">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <Paperclip className="h-5 w-5 text-purple-600" />
+                            <label className="block text-sm font-medium text-gray-700">
+                              Anexar Imagens ou PDFs (Opcional)
+                            </label>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-4">
+                            Adicione fotos do produto, especificações técnicas,
+                            catálogos ou qualquer documento relevante
+                          </p>
+
+                          <FileUpload
+                            onFilesSelected={(files) =>
+                              handleFilesSelected(index, files)
+                            }
+                            selectedFiles={productFiles[index] || []}
+                            maxFiles={10}
+                          />
+
+                          {/* Lista de arquivos já anexados */}
+                          {productFiles[index] &&
+                            productFiles[index].length > 0 && (
+                              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <ImageIcon className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm font-medium text-green-800">
+                                    Arquivos Selecionados (
+                                    {productFiles[index].length})
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {productFiles[index].map(
+                                    (file, fileIndex) => (
+                                      <div
+                                        key={fileIndex}
+                                        className="flex items-center justify-between text-xs"
+                                      >
+                                        <span className="text-green-700 truncate flex items-center">
+                                          {storageService.isImage(file.type) ? (
+                                            <ImageIcon className="h-3 w-3 mr-1" />
+                                          ) : (
+                                            <FileText className="h-3 w-3 mr-1" />
+                                          )}
+                                          {file.name}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeFileFromProduct(
+                                              index,
+                                              fileIndex
+                                            )
+                                          }
+                                          className="text-red-600 hover:text-red-800 ml-2"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -502,7 +652,16 @@ const OrderForm = () => {
                     <Send className="h-5 w-5" />
                     <span>
                       Enviar Pedido ({fields.length} produto
-                      {fields.length > 1 ? "s" : ""})
+                      {fields.length > 1 ? "s" : ""}
+                      {Object.values(productFiles).flat().length > 0 &&
+                        ` + ${
+                          Object.values(productFiles).flat().length
+                        } arquivo${
+                          Object.values(productFiles).flat().length > 1
+                            ? "s"
+                            : ""
+                        }`}
+                      )
                     </span>
                   </>
                 )}

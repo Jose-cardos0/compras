@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Permitir leitura para todos (para visualizar arquivos)
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+    
+    // Regras específicas para uploads de produtos
+    match /products/{orderId}/{productId}/{fileName} {
+      // Permitir upload de arquivos para produtos
+      allow write: if resource == null
+        && request.resource.size < 10 * 1024 * 1024  // Máximo 10MB
+        && request.resource.contentType.matches('image/.*|application/pdf'); // Apenas imagens e PDFs
+    }
+    
+    // Permitir delete apenas para admin (opcional - caso queira implementar depois)
+    match /products/{orderId}/{productId}/{fileName} {
+      allow delete: if false; // Desabilitado por enquanto
+    }
+  }
+} 

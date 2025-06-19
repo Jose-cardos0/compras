@@ -16,6 +16,7 @@ import {
   Plus,
   CheckCircle,
   Settings,
+  Edit,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -24,9 +25,13 @@ const AdminUsers = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [canManageUsers, setCanManageUsers] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editPermissions, setEditPermissions] = useState([]);
+  const [editCanManageUsers, setEditCanManageUsers] = useState(false);
 
   const {
     register,
@@ -90,8 +95,46 @@ const AdminUsers = () => {
     }
   };
 
+  const openEditModal = (user) => {
+    setEditingUser(user);
+    setEditPermissions(user.allowedStatuses || []);
+    setEditCanManageUsers(user.canManageUsers || false);
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePermissions = async () => {
+    if (!editingUser) return;
+
+    try {
+      await usersService.updateUser(editingUser.id, {
+        allowedStatuses: editPermissions,
+        canManageUsers: editCanManageUsers,
+      });
+
+      toast.success("Permissões atualizadas com sucesso!");
+      setShowEditModal(false);
+      setEditingUser(null);
+      setEditPermissions([]);
+      setEditCanManageUsers(false);
+      loadUsers();
+    } catch (error) {
+      console.error("Erro ao atualizar permissões:", error);
+      toast.error("Erro ao atualizar permissões");
+    }
+  };
+
   const togglePermission = (statusValue) => {
     setSelectedPermissions((prev) => {
+      if (prev.includes(statusValue)) {
+        return prev.filter((p) => p !== statusValue);
+      } else {
+        return [...prev, statusValue];
+      }
+    });
+  };
+
+  const toggleEditPermission = (statusValue) => {
+    setEditPermissions((prev) => {
       if (prev.includes(statusValue)) {
         return prev.filter((p) => p !== statusValue);
       } else {
@@ -345,14 +388,27 @@ const AdminUsers = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setDeleteUserId(user.id)}
-                      className="flex items-center max-md:mt-4 max-md:ml-0 max-md:w-full max-md:justify-center
-                       space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="">Deletar</span>
-                    </button>
+                    <div className="flex items-center space-x-2 max-md:mt-4 max-md:ml-0 max-md:justify-center max-md:w-full">
+                      {/* Botão Editar Permissões */}
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="flex items-center space-x-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        title="Editar Permissões"
+                      >
+                        <Edit className="h-4 w-4" />
+                        <span className="max-md:hidden">Editar</span>
+                      </button>
+
+                      {/* Botão Deletar */}
+                      <button
+                        onClick={() => setDeleteUserId(user.id)}
+                        className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                        title="Deletar Usuário"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="max-md:hidden">Deletar</span>
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -578,6 +634,182 @@ const AdminUsers = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Editar Usuário */}
+      <AnimatePresence>
+        {showEditModal && editingUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Editar Permissões - {editingUser.name}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingUser(null);
+                    setEditPermissions([]);
+                    setEditCanManageUsers(false);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Informações do Usuário */}
+              <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-lg">
+                    <User className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">
+                      {editingUser.name}
+                    </h4>
+                    <p className="text-sm text-gray-600">{editingUser.email}</p>
+                    <p className="text-xs text-gray-500">
+                      Criado em: {formatDate(editingUser.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Permissões de Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Permissões de Status - Quais status este usuário pode
+                    alterar?
+                  </label>
+
+                  {/* Explicação do fluxo de status */}
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-800 mb-2">
+                      📋 Fluxo de Status do Sistema:
+                    </h4>
+                    <div className="text-xs text-blue-700 space-y-1">
+                      <p>
+                        <strong>Pendente</strong> → Em Análise, Cancelado
+                      </p>
+                      <p>
+                        <strong>Em Análise</strong> → Em Andamento, Pendente,
+                        Cancelado
+                      </p>
+                      <p>
+                        <strong>Em Andamento</strong> → Entregue, Cancelado
+                      </p>
+                      <p>
+                        <strong>Cancelado/Entregue</strong> → Não pode ser
+                        alterado
+                      </p>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-2">
+                      ⚠️ Usuários só podem alterar status seguindo este fluxo!
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 bg-gray-50 p-4 rounded-lg">
+                    {availableStatuses.map((status) => (
+                      <label
+                        key={status.value}
+                        className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editPermissions.includes(status.value)}
+                          onChange={() => toggleEditPermission(status.value)}
+                          className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {status.label}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+
+                    {editPermissions.length === 0 && (
+                      <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
+                        ⚠️ Usuário não poderá alterar nenhum status!
+                      </p>
+                    )}
+
+                    {editPermissions.length > 0 && (
+                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded">
+                        <p className="text-xs text-green-700 font-medium mb-1">
+                          Permissões selecionadas:
+                        </p>
+                        <p className="text-xs text-green-600">
+                          {editPermissions
+                            .map((perm) => {
+                              const statusInfo = availableStatuses.find(
+                                (s) => s.value === perm
+                              );
+                              return statusInfo ? statusInfo.label : perm;
+                            })
+                            .join(", ")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Permissão de Gerenciar Usuários */}
+                <div>
+                  <label className="flex items-center space-x-3 cursor-pointer bg-blue-50 p-3 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={editCanManageUsers}
+                      onChange={(e) => setEditCanManageUsers(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Pode gerenciar outros usuários
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingUser(null);
+                      setEditPermissions([]);
+                      setEditCanManageUsers(false);
+                    }}
+                    className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUpdatePermissions}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Atualizar Permissões
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

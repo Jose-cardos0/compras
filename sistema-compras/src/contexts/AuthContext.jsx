@@ -52,6 +52,8 @@ export function AuthProvider({ children }) {
           allowedStatuses: availableStatuses.map((s) => s.value),
           isMainAdmin: true,
           canManageUsers: true,
+          name: "Alefe Oliveira",
+          email: userEmail,
         });
         return;
       }
@@ -64,6 +66,8 @@ export function AuthProvider({ children }) {
           allowedStatuses: userData.allowedStatuses || [],
           isMainAdmin: false,
           canManageUsers: userData.canManageUsers || false,
+          name: userData.name || userEmail,
+          email: userEmail,
         });
       } else {
         // Usuário não tem permissões cadastradas
@@ -71,6 +75,8 @@ export function AuthProvider({ children }) {
           allowedStatuses: [],
           isMainAdmin: false,
           canManageUsers: false,
+          name: userEmail,
+          email: userEmail,
         });
       }
     } catch (error) {
@@ -79,6 +85,8 @@ export function AuthProvider({ children }) {
         allowedStatuses: [],
         isMainAdmin: false,
         canManageUsers: false,
+        name: userEmail || "Usuário desconhecido",
+        email: userEmail || "",
       });
     }
   };

@@ -23,6 +23,23 @@ import { auth } from "../firebase/config";
 
 // Serviços para Pedidos
 export const ordersService = {
+  // Função para formatar data no formato brasileiro (DD-MM-YYYY)
+  formatDateToBR(dateString) {
+    if (!dateString) return "";
+
+    // Se a data já está no formato YYYY-MM-DD, converte para DD-MM-YYYY
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) {
+      const day = date.getDate().toString().padStart(2, "0");
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    // Se não conseguir converter, retorna a string original
+    return dateString;
+  },
+
   // Criar novo pedido
   async createOrder(orderData) {
     try {
@@ -91,14 +108,22 @@ export const ordersService = {
   },
 
   // Atualizar status do pedido geral
-  async updateOrderStatus(orderId, status, additionalData = {}) {
+  async updateOrderStatus(orderId, status, additionalData = {}, userInfo = {}) {
     try {
       const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, {
+
+      // Criar histórico de alteração
+      const statusUpdate = {
         status,
         ...additionalData,
         updatedAt: serverTimestamp(),
-      });
+        lastModifiedBy:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+        lastModifiedAt: serverTimestamp(),
+      };
+
+      await updateDoc(orderRef, statusUpdate);
 
       // Buscar dados do pedido para enviar notificação
       const orderDoc = await getDoc(orderRef);
@@ -118,7 +143,13 @@ export const ordersService = {
   },
 
   // Atualizar status de produto individual
-  async updateProductStatus(orderId, productId, status, additionalData = {}) {
+  async updateProductStatus(
+    orderId,
+    productId,
+    status,
+    additionalData = {},
+    userInfo = {}
+  ) {
     try {
       const orderRef = doc(db, "orders", orderId);
       const orderDoc = await getDoc(orderRef);
@@ -141,6 +172,10 @@ export const ordersService = {
             status,
             ...additionalData,
             updatedAt: new Date(),
+            lastModifiedBy:
+              userInfo.name || userInfo.email || "Usuário não identificado",
+            lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+            lastModifiedAt: new Date(),
           };
         }
         return produto;
@@ -150,6 +185,10 @@ export const ordersService = {
       await updateDoc(orderRef, {
         produtos: updatedProducts,
         updatedAt: serverTimestamp(),
+        lastModifiedBy:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+        lastModifiedAt: serverTimestamp(),
       });
 
       // Encontrar o produto que foi atualizado para notificação
@@ -190,7 +229,10 @@ export const ordersService = {
       case "em_andamento":
         message += `*Status Geral:* 🔄 Em Andamento\n\nSeu pedido foi aprovado e está em andamento!`;
         if (additionalData.dataPrevisao) {
-          message += `\n*Data Prevista:* ${additionalData.dataPrevisao}`;
+          const formattedDate = this.formatDateToBR(
+            additionalData.dataPrevisao
+          );
+          message += `\n*Data Prevista:* ${formattedDate}`;
         }
         break;
       case "cancelado":
@@ -226,7 +268,10 @@ export const ordersService = {
       case "em_andamento":
         message += `*Status:* 🔄 Em Andamento\n\nEste produto foi aprovado e está em andamento!`;
         if (additionalData.dataPrevisao) {
-          message += `\n*Data Prevista:* ${additionalData.dataPrevisao}`;
+          const formattedDate = this.formatDateToBR(
+            additionalData.dataPrevisao
+          );
+          message += `\n*Data Prevista:* ${formattedDate}`;
         }
         break;
       case "cancelado":
@@ -306,7 +351,7 @@ export const ordersService = {
   },
 
   // Função para cancelar pedido completo (todos os produtos)
-  async cancelCompleteOrder(orderId, motivoCancelamento = "") {
+  async cancelCompleteOrder(orderId, motivoCancelamento = "", userInfo = {}) {
     try {
       const orderRef = doc(db, "orders", orderId);
       const orderDoc = await getDoc(orderRef);
@@ -325,6 +370,10 @@ export const ordersService = {
           status: "cancelado",
           motivoCancelamento: motivoCancelamento,
           canceledAt: new Date(),
+          lastModifiedBy:
+            userInfo.name || userInfo.email || "Usuário não identificado",
+          lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+          lastModifiedAt: new Date(),
         }));
       }
 
@@ -335,6 +384,10 @@ export const ordersService = {
         motivoCancelamento: motivoCancelamento,
         canceledAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        lastModifiedBy:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+        lastModifiedAt: serverTimestamp(),
       });
 
       // Criar mensagem de notificação para o cliente
@@ -417,6 +470,21 @@ export const usersService = {
       return userData.email;
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
+      throw error;
+    }
+  },
+
+  // Atualizar permissões de usuário
+  async updateUser(userId, userData) {
+    try {
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        ...userData,
+        updatedAt: serverTimestamp(),
+      });
+      return userId;
+    } catch (error) {
+      console.error("Erro ao atualizar usuário:", error);
       throw error;
     }
   },

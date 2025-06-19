@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permitir leitura e escrita para todos nos pedidos (orders)
+    match /orders/{document} {
+      allow read, write: if true;
+    }
+    
+    // Permitir leitura e escrita para todos nos usuários (users)
+    match /users/{document} {
+      allow read, write: if true;
+    }
+    
+    // Para outras coleções, negar acesso por padrão
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { ordersService } from "../services/firestore";
+import { storageService } from "../services/storage";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
@@ -23,9 +24,14 @@ import {
   PackageOpen,
   Car,
   Hourglass,
+  Image as ImageIcon,
+  FileText,
+  Eye,
+  Download,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import FileViewer from "../components/FileViewer";
 
 const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
@@ -42,6 +48,9 @@ const AdminDashboard = () => {
   const [cancelModal, setCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [orderToCancel, setOrderToCancel] = useState(null);
+  const [fileViewerOpen, setFileViewerOpen] = useState(false);
+  const [viewerFiles, setViewerFiles] = useState([]);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
 
   const {
     currentUser,
@@ -99,20 +108,31 @@ const AdminDashboard = () => {
     try {
       let result;
 
+      // Preparar informações do usuário
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
       if (isProductUpdate && selectedProduct) {
         // Atualizar status de produto individual
         result = await ordersService.updateProductStatus(
           selectedOrder.id,
           selectedProduct.id,
           newStatus,
-          additionalData
+          additionalData,
+          userInfo
         );
       } else {
         // Atualizar status geral do pedido
         result = await ordersService.updateOrderStatus(
           selectedOrder.id,
           newStatus,
-          additionalData
+          additionalData,
+          userInfo
         );
       }
 
@@ -176,9 +196,19 @@ const AdminDashboard = () => {
     if (!orderToCancel) return;
 
     try {
+      // Preparar informações do usuário
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
       const result = await ordersService.cancelCompleteOrder(
         orderToCancel.id,
-        cancelReason
+        cancelReason,
+        userInfo
       );
 
       if (result && result.success) {
@@ -266,6 +296,13 @@ const AdminDashboard = () => {
     return matchesStatus && matchesId;
   });
 
+  // Função para filtrar por status clicando nas estatísticas
+  const handleStatusFilter = (status) => {
+    setFilterStatus(status);
+    // Limpar filtro de ID quando filtrar por status das estatísticas
+    // setFilterById("");
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return "Data não disponível";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -288,6 +325,18 @@ const AdminDashboard = () => {
   const openCancelModal = (order) => {
     setOrderToCancel(order);
     setCancelModal(true);
+  };
+
+  const openFileViewer = (files, initialIndex = 0) => {
+    setViewerFiles(files);
+    setViewerInitialIndex(initialIndex);
+    setFileViewerOpen(true);
+  };
+
+  const closeFileViewer = () => {
+    setFileViewerOpen(false);
+    setViewerFiles([]);
+    setViewerInitialIndex(0);
   };
 
   if (loading) {
@@ -348,18 +397,64 @@ const AdminDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Estatísticas */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-4">
+          {/* Card "Todos" */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={() => handleStatusFilter("")}
+            className={`bg-white rounded-xl shadow-lg p-6 border-2 cursor-pointer transition-all duration-200 hover:shadow-xl hover:scale-105 ${
+              filterStatus === ""
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-gray-200 hover:border-indigo-300"
+            }`}
+          >
+            <div className="flex items-center">
+              <div className="bg-indigo-500 p-3 rounded-lg">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Todos</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {orders.length}
+                </p>
+              </div>
+            </div>
+            {filterStatus === "" && (
+              <div className="mt-2">
+                <div className="w-full h-1 bg-indigo-500 rounded-full"></div>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Cards de Status */}
           {Object.entries(statusConfig).map(([status, config]) => {
             const count = orders.filter(
               (order) => getOrderStatus(order) === status
             ).length;
             const Icon = config.icon;
+            const isActive = filterStatus === status;
+
+            // Definir classes de border e background para cada status
+            const activeClasses = {
+              pendente: "border-yellow-500 bg-yellow-50",
+              em_analise: "border-blue-500 bg-blue-50",
+              em_andamento: "border-purple-500 bg-purple-50",
+              cancelado: "border-red-500 bg-red-50",
+              entregue: "border-green-500 bg-green-50",
+            };
+
             return (
               <motion.div
                 key={status}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
+                onClick={() => handleStatusFilter(status)}
+                className={`bg-white rounded-xl shadow-lg p-6 border-2 cursor-pointer transition-all duration-200 hover:shadow-xl hover:scale-105 ${
+                  isActive
+                    ? activeClasses[status]
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
               >
                 <div className="flex items-center">
                   <div className={`${config.color} p-3 rounded-lg`}>
@@ -372,9 +467,23 @@ const AdminDashboard = () => {
                     <p className="text-2xl font-bold text-gray-900">{count}</p>
                   </div>
                 </div>
+                {isActive && (
+                  <div className="mt-2">
+                    <div
+                      className={`w-full h-1 ${config.color} rounded-full`}
+                    ></div>
+                  </div>
+                )}
               </motion.div>
             );
           })}
+        </div>
+
+        {/* Dica sobre filtros clicáveis */}
+        <div className="text-center mb-8">
+          <p className="text-sm text-gray-500">
+            💡 Clique nos cards acima para filtrar os pedidos por status
+          </p>
         </div>
 
         {/* Informações de Permissões */}
@@ -398,9 +507,27 @@ const AdminDashboard = () => {
         {/* Filtros */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900 max-md:text-lg">
-              Filtrar Pedidos
-            </h2>
+            <div className="flex items-center space-x-3">
+              <h2 className="text-xl font-semibold text-gray-900 max-md:text-lg">
+                Filtrar Pedidos
+              </h2>
+              {filterStatus && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-500">•</span>
+                  <span className="text-sm font-medium text-blue-600">
+                    Filtrando por:{" "}
+                    {statusConfig[filterStatus]?.label || filterStatus}
+                  </span>
+                  <button
+                    onClick={() => setFilterStatus("")}
+                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                    title="Remover filtro"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center space-x-4 ">
               <Filter className="h-5 w-5 text-gray-500 max-md:hidden" />
               <div className="flex items-center space-x-3 max-md:flex-col max-md:space-x-0 max-md:space-y-2">
@@ -574,6 +701,29 @@ const AdminDashboard = () => {
                         </div>
                       </div>
 
+                      {/* Informações sobre última modificação */}
+                      {order.lastModifiedBy && (
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Edit3 className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-medium text-blue-800">
+                              Última modificação
+                            </span>
+                          </div>
+                          <div className="text-xs text-blue-700">
+                            <p>
+                              <strong>Por:</strong> {order.lastModifiedBy}
+                            </p>
+                            {order.lastModifiedAt && (
+                              <p>
+                                <strong>Em:</strong>{" "}
+                                {formatDate(order.lastModifiedAt)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Lista de Produtos Expandida */}
                       {hasProducts && isExpanded && (
                         <motion.div
@@ -647,6 +797,132 @@ const AdminDashboard = () => {
                                         {produto.motivo}
                                       </p>
                                     </div>
+
+                                    {/* Arquivos Anexados ao Produto */}
+                                    {produto.files &&
+                                      produto.files.length > 0 && (
+                                        <div>
+                                          <p className="text-xs font-medium text-gray-700 mb-2">
+                                            Arquivos Anexados (
+                                            {produto.files.length}):
+                                          </p>
+                                          <div className="grid grid-cols-3 gap-2 mb-2">
+                                            {produto.files
+                                              .slice(0, 6)
+                                              .map((file, fileIndex) => (
+                                                <button
+                                                  key={fileIndex}
+                                                  onClick={() =>
+                                                    openFileViewer(
+                                                      produto.files,
+                                                      fileIndex
+                                                    )
+                                                  }
+                                                  className="relative aspect-square bg-gray-100 border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all group"
+                                                >
+                                                  {storageService.isImage(
+                                                    file.fileType
+                                                  ) ? (
+                                                    <img
+                                                      src={file.downloadURL}
+                                                      alt={file.fileName}
+                                                      className="w-full h-full object-cover"
+                                                    />
+                                                  ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-red-50">
+                                                      <FileText className="h-6 w-6 text-red-600" />
+                                                    </div>
+                                                  )}
+
+                                                  {/* Overlay */}
+                                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 flex items-center justify-center transition-all">
+                                                    <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                  </div>
+
+                                                  {/* Indicador de tipo */}
+                                                  <div className="absolute top-1 right-1">
+                                                    {storageService.isImage(
+                                                      file.fileType
+                                                    ) ? (
+                                                      <ImageIcon className="h-3 w-3 text-blue-600 bg-white rounded-full p-0.5" />
+                                                    ) : (
+                                                      <FileText className="h-3 w-3 text-red-600 bg-white rounded-full p-0.5" />
+                                                    )}
+                                                  </div>
+                                                </button>
+                                              ))}
+                                          </div>
+
+                                          {produto.files.length > 6 && (
+                                            <button
+                                              onClick={() =>
+                                                openFileViewer(produto.files, 0)
+                                              }
+                                              className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                                            >
+                                              Ver todos os{" "}
+                                              {produto.files.length} arquivos →
+                                            </button>
+                                          )}
+
+                                          <div className="flex flex-wrap gap-1">
+                                            {produto.files.map(
+                                              (file, fileIndex) => (
+                                                <span
+                                                  key={fileIndex}
+                                                  className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded cursor-pointer hover:bg-blue-100"
+                                                  onClick={() =>
+                                                    openFileViewer(
+                                                      produto.files,
+                                                      fileIndex
+                                                    )
+                                                  }
+                                                >
+                                                  {storageService.isImage(
+                                                    file.fileType
+                                                  ) ? (
+                                                    <ImageIcon className="h-3 w-3 mr-1" />
+                                                  ) : (
+                                                    <FileText className="h-3 w-3 mr-1" />
+                                                  )}
+                                                  {file.fileName.length > 15
+                                                    ? file.fileName.substring(
+                                                        0,
+                                                        15
+                                                      ) + "..."
+                                                    : file.fileName}
+                                                </span>
+                                              )
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                    {/* Informações sobre última modificação do produto */}
+                                    {produto.lastModifiedBy && (
+                                      <div className="p-2 bg-amber-50 border border-amber-200 rounded">
+                                        <div className="flex items-center space-x-1 mb-1">
+                                          <Edit3 className="h-3 w-3 text-amber-600" />
+                                          <span className="text-xs font-medium text-amber-800">
+                                            Última alteração
+                                          </span>
+                                        </div>
+                                        <div className="text-xs text-amber-700">
+                                          <p>
+                                            <strong>Por:</strong>{" "}
+                                            {produto.lastModifiedBy}
+                                          </p>
+                                          {produto.lastModifiedAt && (
+                                            <p>
+                                              <strong>Em:</strong>{" "}
+                                              {formatDate(
+                                                produto.lastModifiedAt
+                                              )}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -975,6 +1251,14 @@ const AdminDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* File Viewer */}
+      <FileViewer
+        files={viewerFiles}
+        isOpen={fileViewerOpen}
+        onClose={closeFileViewer}
+        initialIndex={viewerInitialIndex}
+      />
     </div>
   );
 };
