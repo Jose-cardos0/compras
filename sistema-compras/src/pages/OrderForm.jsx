@@ -57,7 +57,7 @@ const OrderForm = () => {
     "Sala de Máquinas",
     "Laboratório",
     "Pasteurização",
-    "Encase UHT",
+    "Envase UHT",
     "FINAL DE LINHA (DES)",
     "Expedição",
     "Concentração",
