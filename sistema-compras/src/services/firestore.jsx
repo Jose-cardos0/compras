@@ -23,17 +23,26 @@ import { auth } from "../firebase/config";
 
 // Serviços para Pedidos
 export const ordersService = {
-  // Função para formatar data no formato brasileiro (DD-MM-YYYY)
+  // Função para formatar data no formato brasileiro (DD/MM/YYYY)
   formatDateToBR(dateString) {
     if (!dateString) return "";
 
-    // Se a data já está no formato YYYY-MM-DD, converte para DD-MM-YYYY
+    // Se a data está no formato YYYY-MM-DD (input date), trata como string para evitar timezone
+    if (
+      typeof dateString === "string" &&
+      dateString.match(/^\d{4}-\d{2}-\d{2}$/)
+    ) {
+      const [year, month, day] = dateString.split("-");
+      return `${day}/${month}/${year}`;
+    }
+
+    // Para outros formatos, tenta converter para data
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
       const day = date.getDate().toString().padStart(2, "0");
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
       const year = date.getFullYear();
-      return `${day}-${month}-${year}`;
+      return `${day}/${month}/${year}`;
     }
 
     // Se não conseguir converter, retorna a string original
@@ -142,6 +151,36 @@ export const ordersService = {
     }
   },
 
+  // Atualizar responsável do pedido
+  async updateOrderResponsible(orderId, responsavel, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Atualizar responsável
+      const responsibleUpdate = {
+        responsavel,
+        updatedAt: serverTimestamp(),
+        lastModifiedBy:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+        lastModifiedAt: serverTimestamp(),
+      };
+
+      await updateDoc(orderRef, responsibleUpdate);
+
+      return {
+        success: true,
+        message: `Responsável ${
+          responsavel ? `atribuído: ${responsavel}` : "removido"
+        } com sucesso!`,
+        orderId: orderId,
+      };
+    } catch (error) {
+      console.error("Erro ao atualizar responsável do pedido:", error);
+      throw error;
+    }
+  },
+
   // Atualizar status de produto individual
   async updateProductStatus(
     orderId,
@@ -181,15 +220,18 @@ export const ordersService = {
         return produto;
       });
 
-      // Atualizar no banco
-      await updateDoc(orderRef, {
+      // Preparar dados para atualizar no pedido principal
+      const orderUpdateData = {
         produtos: updatedProducts,
         updatedAt: serverTimestamp(),
         lastModifiedBy:
           userInfo.name || userInfo.email || "Usuário não identificado",
         lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
         lastModifiedAt: serverTimestamp(),
-      });
+      };
+
+      // Atualizar no banco
+      await updateDoc(orderRef, orderUpdateData);
 
       // Encontrar o produto que foi atualizado para notificação
       const updatedProduct = updatedProducts.find((p) => p.id === productId);
@@ -281,7 +323,7 @@ export const ordersService = {
         }
         break;
       case "entregue":
-        message += `*Status:* ✅ Entregue\n\nEste produto foi entregue com sucesso!`;
+        message += `*Status:* ✅ Entregue\n\nO produto está disponível para retirada no almoxarifado.`;
         break;
       default:
         message += `*Status:* ${status}`;
@@ -425,6 +467,35 @@ export const ordersService = {
       };
     } catch (error) {
       console.error("Erro ao cancelar pedido completo:", error);
+      throw error;
+    }
+  },
+
+  // Função para deletar pedido permanentemente (apenas admin)
+  async deleteOrder(orderId, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      const orderDoc = await getDoc(orderRef);
+
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      const orderData = orderDoc.data();
+
+      // Deletar o documento do Firebase
+      await deleteDoc(orderRef);
+
+      return {
+        success: true,
+        message: `Pedido ${orderId
+          .slice(-8)
+          .toUpperCase()} deletado permanentemente`,
+        orderId: orderId,
+        orderData: orderData,
+      };
+    } catch (error) {
+      console.error("Erro ao deletar pedido:", error);
       throw error;
     }
   },

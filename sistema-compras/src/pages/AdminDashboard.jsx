@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { ordersService } from "../services/firestore";
+import { ordersService, usersService } from "../services/firestore";
 import { storageService } from "../services/storage";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -28,6 +28,9 @@ import {
   FileText,
   Eye,
   Download,
+  UserCheck,
+  Tag,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +46,7 @@ const AdminDashboard = () => {
   const [additionalData, setAdditionalData] = useState({});
   const [filterStatus, setFilterStatus] = useState("");
   const [filterById, setFilterById] = useState("");
+  const [filterByResponsible, setFilterByResponsible] = useState("");
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [isProductUpdate, setIsProductUpdate] = useState(false);
   const [cancelModal, setCancelModal] = useState(false);
@@ -51,6 +55,13 @@ const AdminDashboard = () => {
   const [fileViewerOpen, setFileViewerOpen] = useState(false);
   const [viewerFiles, setViewerFiles] = useState([]);
   const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
+  const [responsibleModal, setResponsibleModal] = useState(false);
+  const [selectedOrderForResponsible, setSelectedOrderForResponsible] =
+    useState(null);
+  const [newResponsible, setNewResponsible] = useState("");
+  const [users, setUsers] = useState([]);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState(null);
 
   const {
     currentUser,
@@ -79,6 +90,47 @@ const AdminDashboard = () => {
     entregue: { label: "Entregue", color: "bg-green-500", icon: CheckCircle },
   };
 
+  // Cores disponíveis para os marcadores de responsáveis
+  const availableColors = [
+    "bg-blue-500",
+    "bg-green-500",
+    "bg-yellow-500",
+    "bg-purple-500",
+    "bg-red-500",
+    "bg-indigo-500",
+    "bg-pink-500",
+    "bg-teal-500",
+    "bg-orange-500",
+    "bg-gray-500",
+    "bg-cyan-500",
+    "bg-emerald-500",
+    "bg-rose-500",
+    "bg-violet-500",
+    "bg-amber-500",
+  ];
+
+  // Gerar lista de responsáveis dinamicamente a partir dos usuários cadastrados
+  const getResponsibleOptions = () => {
+    if (!users || users.length === 0) return [];
+
+    // Separar Alefe Oliveira dos outros usuários
+    const alefeUser = users.find((user) => user.name === "Alefe Oliveira");
+    const otherUsers = users.filter((user) => user.name !== "Alefe Oliveira");
+
+    // Ordenar outros usuários alfabeticamente
+    otherUsers.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Montar lista final com Alefe no topo
+    const orderedUsers = alefeUser ? [alefeUser, ...otherUsers] : otherUsers;
+
+    // Mapear usuários para formato de responsáveis com cores
+    return orderedUsers.map((user, index) => ({
+      name: user.name,
+      color: availableColors[index % availableColors.length],
+      email: user.id,
+    }));
+  };
+
   useEffect(() => {
     const unsubscribe = ordersService.subscribeToOrders((ordersData) => {
       setOrders(ordersData);
@@ -86,6 +138,20 @@ const AdminDashboard = () => {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Buscar usuários cadastrados
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const usersData = await usersService.getAllUsers();
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Erro ao buscar usuários:", error);
+      }
+    };
+
+    fetchUsers();
   }, []);
 
   const handleStatusUpdate = async () => {
@@ -293,7 +359,13 @@ const AdminDashboard = () => {
     const matchesId = filterById
       ? order.id.toLowerCase().includes(filterById.toLowerCase())
       : true;
-    return matchesStatus && matchesId;
+    const matchesResponsible = filterByResponsible
+      ? order.responsavel &&
+        order.responsavel
+          .toLowerCase()
+          .includes(filterByResponsible.toLowerCase())
+      : true;
+    return matchesStatus && matchesId && matchesResponsible;
   });
 
   // Função para filtrar por status clicando nas estatísticas
@@ -337,6 +409,201 @@ const AdminDashboard = () => {
     setFileViewerOpen(false);
     setViewerFiles([]);
     setViewerInitialIndex(0);
+  };
+
+  const openResponsibleModal = (order) => {
+    setSelectedOrderForResponsible(order);
+    setNewResponsible(order.responsavel || "");
+    setResponsibleModal(true);
+  };
+
+  const handleResponsibleUpdate = async () => {
+    if (!selectedOrderForResponsible) return;
+
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
+      await ordersService.updateOrderResponsible(
+        selectedOrderForResponsible.id,
+        newResponsible,
+        userInfo
+      );
+
+      toast.success("Responsável atualizado com sucesso!");
+      setResponsibleModal(false);
+      setSelectedOrderForResponsible(null);
+      setNewResponsible("");
+    } catch (error) {
+      console.error("Erro ao atualizar responsável:", error);
+      toast.error("Erro ao atualizar responsável");
+    }
+  };
+
+  const getResponsibleColor = (responsibleName) => {
+    if (!responsibleName) return "bg-gray-300";
+    const responsible = getResponsibleOptions().find(
+      (r) => r.name === responsibleName
+    );
+    return responsible ? responsible.color : "bg-gray-400";
+  };
+
+  // Função para calcular e formatar a data prevista de chegada
+  const getDeliveryDateInfo = (order) => {
+    // Verificar se há produtos em andamento com data prevista
+    if (!order.produtos || order.produtos.length === 0) {
+      // Para pedidos sem estrutura de produtos (compatibilidade)
+      const orderStatus = getOrderStatus(order);
+      if (orderStatus !== "em_andamento" || !order.dataPrevisao) {
+        return null;
+      }
+
+      return [getDateInfoForSingleItem("Produto", order.dataPrevisao)];
+    }
+
+    // Para pedidos com múltiplos produtos
+    const productsInProgress = order.produtos.filter(
+      (produto) => produto.status === "em_andamento" && produto.dataPrevisao
+    );
+
+    if (productsInProgress.length === 0) {
+      return null;
+    }
+
+    return productsInProgress.map((produto) =>
+      getDateInfoForSingleItem(produto.produto, produto.dataPrevisao)
+    );
+  };
+
+  // Função auxiliar para calcular informações de data de um item específico
+  const getDateInfoForSingleItem = (productName, dataPrevisao) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Tratar data prevista corretamente para evitar problemas de timezone
+    let deliveryDate;
+    if (
+      typeof dataPrevisao === "string" &&
+      dataPrevisao.match(/^\d{4}-\d{2}-\d{2}$/)
+    ) {
+      const [year, month, day] = dataPrevisao.split("-");
+      deliveryDate = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day)
+      );
+    } else {
+      deliveryDate = new Date(dataPrevisao);
+    }
+    deliveryDate.setHours(0, 0, 0, 0);
+
+    // Calcular diferença em dias
+    const diffTime = deliveryDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Formatar data para exibição no formato brasileiro
+    const formattedDate = `${deliveryDate
+      .getDate()
+      .toString()
+      .padStart(2, "0")}/${(deliveryDate.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}/${deliveryDate.getFullYear()}`;
+
+    // Determinar cor e texto baseado na diferença de dias
+    if (diffDays < 0) {
+      return {
+        productName,
+        text: `${productName} - ATRASADO DESDE O DIA ${formattedDate}`,
+        colorClass: "text-red-600 font-bold",
+        bgClass: "bg-red-50 border-red-200",
+        icon: "⚠️",
+      };
+    } else if (diffDays === 0) {
+      return {
+        productName,
+        text: `${productName} - Chegada HOJE (${formattedDate})`,
+        colorClass: "text-red-600 font-semibold",
+        bgClass: "bg-red-50 border-red-200",
+        icon: "🚨",
+      };
+    } else if (diffDays <= 3) {
+      return {
+        productName,
+        text: `${productName} - Chegada em ${diffDays} dia${
+          diffDays > 1 ? "s" : ""
+        } (${formattedDate})`,
+        colorClass: "text-orange-600 font-semibold",
+        bgClass: "bg-orange-50 border-orange-200",
+        icon: "⏰",
+      };
+    } else if (diffDays <= 7) {
+      return {
+        productName,
+        text: `${productName} - Chegada em ${diffDays} dias (${formattedDate})`,
+        colorClass: "text-yellow-600 font-medium",
+        bgClass: "bg-yellow-50 border-yellow-200",
+        icon: "📅",
+      };
+    } else {
+      return {
+        productName,
+        text: `${productName} - Chegada em ${diffDays} dias (${formattedDate})`,
+        colorClass: "text-green-600 font-medium",
+        bgClass: "bg-green-50 border-green-200",
+        icon: "✅",
+      };
+    }
+  };
+
+  const openDeleteModal = (order) => {
+    setOrderToDelete(order);
+    setDeleteModal(true);
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
+      const result = await ordersService.deleteOrder(
+        orderToDelete.id,
+        userInfo
+      );
+
+      if (result && result.success) {
+        toast.success(
+          <div className="text-sm">
+            <p className="font-semibold mb-2">
+              Pedido deletado permanentemente!
+            </p>
+            <p className="text-gray-600 text-xs">
+              ID: {result.orderId.slice(-8).toUpperCase()}
+            </p>
+          </div>,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success("Pedido deletado com sucesso!");
+      }
+
+      setDeleteModal(false);
+      setOrderToDelete(null);
+    } catch (error) {
+      console.error("Erro ao deletar pedido:", error);
+      toast.error("Erro ao deletar pedido");
+    }
   };
 
   if (loading) {
@@ -538,6 +805,13 @@ const AdminDashboard = () => {
                   onChange={(e) => setFilterById(e.target.value)}
                   className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48"
                 />
+                <input
+                  type="text"
+                  placeholder="Buscar Por Responsável..."
+                  value={filterByResponsible}
+                  onChange={(e) => setFilterByResponsible(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent w-48"
+                />
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
@@ -550,11 +824,12 @@ const AdminDashboard = () => {
                     </option>
                   ))}
                 </select>
-                {(filterStatus || filterById) && (
+                {(filterStatus || filterById || filterByResponsible) && (
                   <button
                     onClick={() => {
                       setFilterStatus("");
                       setFilterById("");
+                      setFilterByResponsible("");
                     }}
                     className="flex items-center space-x-1 bg-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors"
                   >
@@ -665,6 +940,17 @@ const AdminDashboard = () => {
                                 </span>
                               </button>
                             )}
+                          {/* Botão para deletar pedido permanentemente - só aparece para admin principal */}
+                          {userPermissions?.isMainAdmin && (
+                            <button
+                              onClick={() => openDeleteModal(order)}
+                              className="flex items-center space-x-2 bg-gray-700 text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+                              title="Deletar pedido permanentemente"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="max-md:hidden">Deletar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -966,16 +1252,16 @@ const AdminDashboard = () => {
                       )}
 
                       {/* Informações adicionais */}
-                      {order.dataPrevisao && (
-                        <div className="mt-3">
-                          <h4 className="font-medium text-gray-900 mb-1">
-                            Data Prevista:
+                      {/* {order.dataPrevisao && (
+                        <div className="mt-3 flex items-center space-x-2 text-sm">
+                          <h4 className="font-thin text-gray-900 mb-1">
+                            Previsão de Entrega:
                           </h4>
                           <p className="text-sm text-green-700 font-medium">
-                            {order.dataPrevisao}
+                            {ordersService.formatDateToBR(order.dataPrevisao)}{" "}
                           </p>
                         </div>
-                      )}
+                      )} */}
 
                       {order.motivoCancelamento && (
                         <div className="mt-3">
@@ -987,6 +1273,72 @@ const AdminDashboard = () => {
                           </p>
                         </div>
                       )}
+
+                      {/* Rodapé com marcador de responsável */}
+                      <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <UserCheck className="h-5 w-5 text-gray-500" />
+                            <span className="text-sm max-md:hidden font-medium text-gray-700">
+                              Responsável:
+                            </span>
+                            {order.responsavel ? (
+                              <div className="flex items-center space-x-2">
+                                <div
+                                  className={`w-3 h-3 rounded-full ${getResponsibleColor(
+                                    order.responsavel
+                                  )}`}
+                                ></div>
+                                <span className="text-sm font-medium text-gray-900">
+                                  {order.responsavel}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">
+                                Não atribuído
+                              </span>
+                            )}
+                          </div>
+                          {userPermissions?.isMainAdmin && (
+                            <button
+                              onClick={() => openResponsibleModal(order)}
+                              className="flex items-center space-x-2 bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                            >
+                              <Tag className="h-4 w-4" />
+                              <span>Marcar</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Informação da Data Prevista de Chegada - só para pedidos em andamento */}
+                        {(() => {
+                          const deliveryInfos = getDeliveryDateInfo(order);
+                          if (!deliveryInfos || deliveryInfos.length === 0)
+                            return null;
+
+                          return (
+                            <div className="mt-3 space-y-2">
+                              {deliveryInfos.map((deliveryInfo, index) => (
+                                <div
+                                  key={index}
+                                  className={`p-3 rounded-lg border ${deliveryInfo.bgClass}`}
+                                >
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-lg">
+                                      {deliveryInfo.icon}
+                                    </span>
+                                    <span
+                                      className={`text-sm ${deliveryInfo.colorClass}`}
+                                    >
+                                      {deliveryInfo.text}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -1200,7 +1552,8 @@ const AdminDashboard = () => {
                         {orderToCancel.produtos.length} produto
                         {orderToCancel.produtos.length > 1 ? "s" : ""} será
                         {orderToCancel.produtos.length > 1 ? "ão" : ""}{" "}
-                        cancelado{orderToCancel.produtos.length > 1 ? "s" : ""}
+                        cancelado
+                        {orderToCancel.produtos.length > 1 ? "s" : ""}
                       </p>
                     ) : (
                       <p className="text-sm text-gray-600">
@@ -1245,6 +1598,228 @@ const AdminDashboard = () => {
                 >
                   <XCircle className="h-4 w-4" />
                   <span>Cancelar Pedido</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Marcar Responsável */}
+      <AnimatePresence>
+        {responsibleModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  🏷️ Marcar Responsável
+                </h3>
+                <button
+                  onClick={() => setResponsibleModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {selectedOrderForResponsible && (
+                <div className="mb-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <UserCheck className="h-5 w-5 text-green-600" />
+                      <h4 className="font-semibold text-green-800">
+                        Atribuir Responsável ao Pedido
+                      </h4>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      Escolha quem ficará responsável por este pedido. A
+                      marcação será visível no rodapé com uma cor
+                      identificadora.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <h5 className="font-semibold text-gray-800 mb-2">
+                      Pedido:{" "}
+                      {selectedOrderForResponsible.id.slice(-8).toUpperCase()}
+                    </h5>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Cliente:{" "}
+                      <strong>
+                        {selectedOrderForResponsible.nomeCompleto}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Setor: {selectedOrderForResponsible.setor}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecionar Responsável
+                  </label>
+                  <select
+                    value={newResponsible}
+                    onChange={(e) => setNewResponsible(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value="">Selecione um responsável</option>
+                    {getResponsibleOptions().map((responsible) => (
+                      <option key={responsible.name} value={responsible.name}>
+                        {responsible.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {newResponsible && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={`w-4 h-4 rounded-full ${getResponsibleColor(
+                          newResponsible
+                        )}`}
+                      ></div>
+                      <span className="text-sm font-medium text-gray-700">
+                        Cor do marcador: {newResponsible}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setResponsibleModal(false);
+                    setSelectedOrderForResponsible(null);
+                    setNewResponsible("");
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleResponsibleUpdate}
+                  disabled={!newResponsible}
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  <span>Marcar Responsável</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Deletar Pedido */}
+      <AnimatePresence>
+        {deleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  🗑️ Deletar Pedido Permanentemente
+                </h3>
+                <button
+                  onClick={() => setDeleteModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {orderToDelete && (
+                <div className="mb-6">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Trash2 className="h-5 w-5 text-red-600" />
+                      <h4 className="font-semibold text-red-800">
+                        ⚠️ AÇÃO IRREVERSÍVEL ⚠️
+                      </h4>
+                    </div>
+                    <p className="text-sm text-red-700">
+                      Este pedido será deletado permanentemente do banco de
+                      dados. Esta ação não pode ser desfeita e o pedido será
+                      perdido para sempre.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <h5 className="font-semibold text-gray-800 mb-2">
+                      Pedido: {orderToDelete.id.slice(-8).toUpperCase()}
+                    </h5>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Cliente: <strong>{orderToDelete.nomeCompleto}</strong>
+                    </p>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Setor: {orderToDelete.setor}
+                    </p>
+                    {orderToDelete.produtos &&
+                    orderToDelete.produtos.length > 0 ? (
+                      <p className="text-sm text-gray-600">
+                        {orderToDelete.produtos.length} produto
+                        {orderToDelete.produtos.length > 1 ? "s" : ""} será
+                        {orderToDelete.produtos.length > 1 ? "ão" : ""} deletado
+                        {orderToDelete.produtos.length > 1 ? "s" : ""}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        Produto: {orderToDelete.produto}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-yellow-800 font-medium">
+                      ⚠️ Certifique-se de que realmente deseja deletar este
+                      pedido. Considere usar a opção "Cancelar Pedido" em vez de
+                      deletar.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setDeleteModal(false);
+                    setOrderToDelete(null);
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteOrder}
+                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Deletar Permanentemente</span>
                 </button>
               </div>
             </motion.div>
