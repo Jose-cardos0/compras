@@ -1,9 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR" translate="no">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Meta tags para impedir tradução automática - Mais robustas -->
+    <meta name="google" content="notranslate" />
+    <meta name="google-translate-customization" content="disable" />
+    <meta http-equiv="Content-Language" content="pt-BR" />
+    <meta name="translate" content="no" />
+    <meta name="msapplication-translate" content="no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
     <title>Controle de Pedidos - Natville</title>
     <!-- SEO Meta Tags -->
     <meta
@@ -60,9 +70,75 @@
     <!-- Mobile-specific -->
     <meta name="format-detection" content="telephone=no" />
     <meta name="theme-color" content="#6366F1" />
+
+    <!-- CSS inline para proteção adicional contra tradução -->
+    <style>
+      /* Proteção contra tradução via CSS */
+      html[translate="no"] * {
+        translate: no !important;
+      }
+
+      .notranslate {
+        translate: no !important;
+      }
+
+      /* Prevenir problemas de renderização durante tradução */
+      #root {
+        min-height: 100vh;
+        position: relative;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <body translate="no" class="notranslate">
+    <div id="root" translate="no" class="notranslate"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Script para detectar e prevenir tradução -->
+    <script>
+      // Detectar se a página foi traduzida e recarregar se necessário
+      (function () {
+        let originalTitle = document.title;
+
+        // Observer para detectar mudanças no DOM que podem indicar tradução
+        const observer = new MutationObserver(function (mutations) {
+          mutations.forEach(function (mutation) {
+            // Se o título mudou (indicando tradução), podemos tomar ação
+            if (
+              document.title !== originalTitle &&
+              document.title.includes("Translated")
+            ) {
+              console.warn("Tradução detectada, recarregando página...");
+              location.reload();
+            }
+          });
+        });
+
+        // Observar mudanças no head (onde traduções costumam alterar o título)
+        observer.observe(document.head, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+
+        // Adicionar atributos de proteção contra tradução em elementos dinâmicos
+        const protectFromTranslation = () => {
+          const root = document.getElementById("root");
+          if (root) {
+            root.setAttribute("translate", "no");
+            root.classList.add("notranslate");
+          }
+        };
+
+        // Executar quando DOM carregar
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", protectFromTranslation);
+        } else {
+          protectFromTranslation();
+        }
+
+        // Executar periodicamente para garantir proteção
+        setInterval(protectFromTranslation, 1000);
+      })();
+    </script>
   </body>
 </html>

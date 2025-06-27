@@ -315,6 +315,7 @@ const AdminDashboard = () => {
 
     // Definir status atual para determinar opções disponíveis
     const currentStatus = product ? product.status : getOrderStatus(order);
+
     setNewStatus(currentStatus);
     setStatusModal(true);
   };
@@ -340,15 +341,38 @@ const AdminDashboard = () => {
     const productStatuses = order.produtos.map((p) => p.status);
     const uniqueStatuses = [...new Set(productStatuses)];
 
+    // Se todos os produtos têm o mesmo status, retorna esse status
     if (uniqueStatuses.length === 1) {
-      return uniqueStatuses[0]; // Todos produtos têm o mesmo status
+      return uniqueStatuses[0];
     }
 
-    // Status mistos - priorizar por ordem de importância
-    if (productStatuses.includes("cancelado")) return "cancelado";
-    if (productStatuses.includes("entregue")) return "em_andamento"; // Alguns entregues
-    if (productStatuses.includes("em_andamento")) return "em_andamento";
-    if (productStatuses.includes("em_analise")) return "em_analise";
+    // Para status mistos, usar uma lógica diferente:
+    // 1. Se TODOS os produtos estão cancelados, então o pedido está cancelado
+    const allCanceled = productStatuses.every(
+      (status) => status === "cancelado"
+    );
+    if (allCanceled) return "cancelado";
+
+    // 2. Se TODOS os produtos estão entregues, então o pedido está entregue
+    const allDelivered = productStatuses.every(
+      (status) => status === "entregue"
+    );
+    if (allDelivered) return "entregue";
+
+    // 3. Para status mistos, priorizar por ordem de importância (excluindo cancelados)
+    const nonCanceledStatuses = productStatuses.filter(
+      (status) => status !== "cancelado"
+    );
+
+    if (nonCanceledStatuses.length === 0) {
+      return "cancelado"; // Só se todos estiverem cancelados
+    }
+
+    // Verificar status dos produtos não cancelados
+    if (nonCanceledStatuses.includes("entregue")) return "em_andamento"; // Alguns entregues, outros não
+    if (nonCanceledStatuses.includes("em_andamento")) return "em_andamento";
+    if (nonCanceledStatuses.includes("em_analise")) return "em_analise";
+
     return "pendente";
   };
 

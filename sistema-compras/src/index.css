@@ -83,3 +83,46 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* Proteção robusta contra tradução */
+.notranslate {
+  translate: no !important;
+  -webkit-translate: no !important;
+  -moz-translate: no !important;
+  -ms-translate: no !important;
+}
+
+/* Garantir estabilidade de renderização durante tentativas de tradução */
+#root {
+  translate: no !important;
+  -webkit-translate: no !important;
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate; /* Criar contexto de empilhamento isolado */
+}
+
+/* Prevenir problemas específicos com tradutores automáticos */
+html[translate="no"] *,
+html[translate="no"] *::before,
+html[translate="no"] *::after {
+  translate: no !important;
+  -webkit-translate: no !important;
+}
+
+/* Proteção adicional para elementos React */
+[data-reactroot],
+[data-react-helmet] {
+  translate: no !important;
+  -webkit-translate: no !important;
+}
+
+/* Garantir que elementos críticos não sejam afetados por tradução */
+button,
+input,
+textarea,
+select,
+.btn,
+.input {
+  translate: no !important;
+  -webkit-translate: no !important;
+}

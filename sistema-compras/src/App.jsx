@@ -18,7 +18,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="App">
+        <div className="App notranslate" translate="no">
           <Routes>
             {/* Rota pública - Formulário de pedidos */}
             <Route path="/" element={<OrderForm />} />

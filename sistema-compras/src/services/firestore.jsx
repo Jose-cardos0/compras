@@ -60,7 +60,7 @@ export const ordersService = {
       });
 
       // Criar mensagem específica para o ADMIN sobre novo pedido
-      let adminMessage = `🔔 *NOVO PEDIDO RECEBIDO!*\n\n`;
+      let adminMessage = `❗ *NOVO PEDIDO RECEBIDO!*\n\n`;
       adminMessage += `*ID do Pedido:* ${docRef.id
         .slice(-8)
         .toUpperCase()}\n\n`;
@@ -121,10 +121,35 @@ export const ordersService = {
     try {
       const orderRef = doc(db, "orders", orderId);
 
-      // Criar histórico de alteração
+      // Primeiro, buscar os dados atuais do pedido
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      const orderData = orderDoc.data();
+
+      // Preparar atualização dos produtos (se existirem)
+      let updatedProducts = [];
+      if (orderData.produtos && Array.isArray(orderData.produtos)) {
+        // ATUALIZAR TODOS OS PRODUTOS PARA O MESMO STATUS GERAL
+        updatedProducts = orderData.produtos.map((produto) => ({
+          ...produto,
+          status, // Forçar o status geral em TODOS os produtos
+          ...additionalData, // Aplicar dados adicionais (como data de previsão, motivo cancelamento)
+          updatedAt: new Date(),
+          lastModifiedBy:
+            userInfo.name || userInfo.email || "Usuário não identificado",
+          lastModifiedByEmail: userInfo.email || "email@naoidentificado.com",
+          lastModifiedAt: new Date(),
+        }));
+      }
+
+      // Criar histórico de alteração para o pedido geral
       const statusUpdate = {
         status,
         ...additionalData,
+        produtos: updatedProducts, // Incluir produtos atualizados
         updatedAt: serverTimestamp(),
         lastModifiedBy:
           userInfo.name || userInfo.email || "Usuário não identificado",
@@ -132,19 +157,17 @@ export const ordersService = {
         lastModifiedAt: serverTimestamp(),
       };
 
+      // Atualizar no banco de dados
       await updateDoc(orderRef, statusUpdate);
 
-      // Buscar dados do pedido para enviar notificação
-      const orderDoc = await getDoc(orderRef);
-      if (orderDoc.exists()) {
-        const orderData = orderDoc.data();
-        const result = await this.sendOrderStatusNotification(
-          orderData,
-          status,
-          additionalData
-        );
-        return result;
-      }
+      // Enviar notificação sobre a atualização geral
+      const result = await this.sendOrderStatusNotification(
+        orderData,
+        status,
+        additionalData
+      );
+
+      return result;
     } catch (error) {
       console.error("Erro ao atualizar status do pedido:", error);
       throw error;
@@ -253,7 +276,7 @@ export const ordersService = {
 
   // Enviar notificação de status do pedido geral
   async sendOrderStatusNotification(orderData, status, additionalData) {
-    let message = `🔔 *Atualização do Pedido Geral*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
+    let message = `❗ *Atualização do Pedido Geral*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
 
     // Mostrar resumo do pedido
     if (orderData.produtos && orderData.produtos.length > 0) {
@@ -266,10 +289,10 @@ export const ordersService = {
 
     switch (status) {
       case "em_analise":
-        message += `*Status Geral:* ✅ Em Análise\n\nSeu pedido está sendo analisado pela nossa equipe.`;
+        message += `*Status Geral:* ✓ Em Análise\n\nSeu pedido está sendo analisado pela nossa equipe.`;
         break;
       case "em_andamento":
-        message += `*Status Geral:* 🔄 Em Andamento\n\nSeu pedido foi aprovado e está em andamento!`;
+        message += `*Status Geral:* ⚡ Em Andamento\n\nSeu pedido foi aprovado e está em andamento!`;
         if (additionalData.dataPrevisao) {
           const formattedDate = this.formatDateToBR(
             additionalData.dataPrevisao
@@ -278,16 +301,21 @@ export const ordersService = {
         }
         break;
       case "cancelado":
-        message += `*Status Geral:* ❌ Cancelado/Negado\n\nInfelizmente seu pedido foi cancelado.`;
+        message += `*Status Geral:* ✗ Cancelado/Negado\n\nInfelizmente seu pedido foi cancelado.`;
         if (additionalData.motivoCancelamento) {
           message += `\n*Motivo:* ${additionalData.motivoCancelamento}`;
         }
         break;
       case "entregue":
-        message += `*Status Geral:* ✅ Entregue\n\nSeu pedido foi entregue com sucesso!`;
+        message += `*Status Geral:* ✓ Entregue\n\nSeu pedido foi entregue com sucesso!`;
         break;
       default:
         message += `*Status Geral:* ${status}`;
+    }
+
+    // Adicionar informação sobre produtos quando há múltiplos produtos
+    if (orderData.produtos && orderData.produtos.length > 1) {
+      message += `\n\n⚠ *Importante:* Todos os ${orderData.produtos.length} produtos deste pedido tiveram seus status atualizados para o status geral.`;
     }
 
     return this.sendNotification(orderData.whatsapp, message);
@@ -300,15 +328,15 @@ export const ordersService = {
     status,
     additionalData
   ) {
-    let message = `🔔 *Atualização de Produto*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
+    let message = `❗ *Atualização de Produto*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
     message += `*Produto:* ${product.produto}\n`;
 
     switch (status) {
       case "em_analise":
-        message += `*Status:* ✅ Em Análise\n\nEste produto está sendo analisado pela nossa equipe.`;
+        message += `*Status:* ✓ Em Análise\n\nEste produto está sendo analisado pela nossa equipe.`;
         break;
       case "em_andamento":
-        message += `*Status:* 🔄 Em Andamento\n\nEste produto foi aprovado e está em andamento!`;
+        message += `*Status:* ⚡ Em Andamento\n\nEste produto foi aprovado e está em andamento!`;
         if (additionalData.dataPrevisao) {
           const formattedDate = this.formatDateToBR(
             additionalData.dataPrevisao
@@ -317,13 +345,13 @@ export const ordersService = {
         }
         break;
       case "cancelado":
-        message += `*Status:* ❌ Cancelado/Negado\n\nInfelizmente este produto foi cancelado.`;
+        message += `*Status:* ✗ Cancelado/Negado\n\nInfelizmente este produto foi cancelado.`;
         if (additionalData.motivoCancelamento) {
           message += `\n*Motivo:* ${additionalData.motivoCancelamento}`;
         }
         break;
       case "entregue":
-        message += `*Status:* ✅ Entregue\n\nO produto está disponível para retirada no almoxarifado.`;
+        message += `*Status:* ✓ Entregue\n\nO produto está disponível para retirada no almoxarifado.`;
         break;
       default:
         message += `*Status:* ${status}`;
@@ -331,15 +359,15 @@ export const ordersService = {
 
     // Adicionar informações sobre outros produtos do pedido
     if (orderData.produtos && orderData.produtos.length > 1) {
-      message += `\n\n📋 *Outros produtos do pedido:*\n`;
+      message += `\n\n⚠ *Outros produtos do pedido:*\n`;
       orderData.produtos.forEach((p, index) => {
         if (p.id !== product.id) {
           const statusLabels = {
             pendente: "⏳ Pendente",
-            em_analise: "🔍 Em Análise",
-            em_andamento: "🔄 Em Andamento",
-            cancelado: "❌ Cancelado",
-            entregue: "✅ Entregue",
+            em_analise: "✓ Em Análise",
+            em_andamento: "⚡ Em Andamento",
+            cancelado: "✗ Cancelado",
+            entregue: "✓ Entregue",
           };
           message += `• ${p.produto}: ${statusLabels[p.status] || p.status}\n`;
         }
@@ -433,7 +461,7 @@ export const ordersService = {
       });
 
       // Criar mensagem de notificação para o cliente
-      let message = `❌ *PEDIDO CANCELADO*\n\n`;
+      let message = `✗ *PEDIDO CANCELADO*\n\n`;
       message += `*ID do Pedido:* ${orderId.slice(-8).toUpperCase()}\n\n`;
       message += `Olá ${orderData.nomeCompleto}!\n\n`;
       message += `Infelizmente seu pedido foi cancelado completamente.\n\n`;
