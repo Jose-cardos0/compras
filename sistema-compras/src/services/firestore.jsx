@@ -162,7 +162,7 @@ export const ordersService = {
 
       // Enviar notificação sobre a atualização geral
       const result = await this.sendOrderStatusNotification(
-        orderData,
+        { ...orderData, id: orderId }, // Incluir o ID no orderData
         status,
         additionalData
       );
@@ -261,7 +261,7 @@ export const ordersService = {
 
       if (updatedProduct) {
         const result = await this.sendProductStatusNotification(
-          orderData,
+          { ...orderData, id: orderId },
           updatedProduct,
           status,
           additionalData
@@ -276,7 +276,9 @@ export const ordersService = {
 
   // Enviar notificação de status do pedido geral
   async sendOrderStatusNotification(orderData, status, additionalData) {
-    let message = `❗ *Atualização do Pedido Geral*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
+    let message = `❗ *Atualização do Pedido Geral*\n\nOlá ${
+      orderData.nomeCompleto
+    }!\n\n *ID do Pedido:* ${orderData.id.slice(-8).toUpperCase()}\n\n`;
 
     // Mostrar resumo do pedido
     if (orderData.produtos && orderData.produtos.length > 0) {
@@ -328,7 +330,9 @@ export const ordersService = {
     status,
     additionalData
   ) {
-    let message = `❗ *Atualização de Produto*\n\nOlá ${orderData.nomeCompleto}!\n\n`;
+    let message = `❗ *Atualização de Produto*\n\nOlá ${
+      orderData.nomeCompleto
+    }!\n\n *ID do Pedido:* ${orderData.id.slice(-8).toUpperCase()}\n\n`;
     message += `*Produto:* ${product.produto}\n`;
 
     switch (status) {
@@ -466,32 +470,18 @@ export const ordersService = {
       message += `Olá ${orderData.nomeCompleto}!\n\n`;
       message += `Infelizmente seu pedido foi cancelado completamente.\n\n`;
 
-      if (orderData.produtos && orderData.produtos.length > 0) {
-        message += `*${orderData.produtos.length} Produto${
-          orderData.produtos.length > 1 ? "s" : ""
-        } Cancelado${orderData.produtos.length > 1 ? "s" : ""}:*\n\n`;
-        orderData.produtos.forEach((produto, index) => {
-          message += `${index + 1}. *${produto.produto}*\n`;
-        });
-        message += `\n`;
-      } else if (orderData.produto) {
-        message += `*Produto Cancelado:* ${orderData.produto}\n\n`;
-      }
-
       if (motivoCancelamento) {
-        message += `*Motivo do Cancelamento:* ${motivoCancelamento}\n\n`;
+        message += `*Motivo:* ${motivoCancelamento}\n\n`;
       }
 
-      message += `Para dúvidas, entre em contato conosco.`;
-
-      // Enviar notificação para o cliente
+      // Enviar notificação
       const result = await this.sendNotification(orderData.whatsapp, message);
 
       return {
         success: true,
-        result: result,
-        message: message,
+        message: "Pedido cancelado com sucesso!",
         orderId: orderId,
+        result: result,
       };
     } catch (error) {
       console.error("Erro ao cancelar pedido completo:", error);
@@ -503,6 +493,73 @@ export const ordersService = {
   async deleteOrder(orderId, userInfo = {}) {
     try {
       const orderRef = doc(db, "orders", orderId);
+
+      // Primeiro, buscar os dados atuais do pedido
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      await deleteDoc(orderRef);
+
+      return {
+        success: true,
+        message: "Pedido deletado permanentemente do sistema",
+        orderId: orderId,
+      };
+    } catch (error) {
+      console.error("Erro ao deletar pedido:", error);
+      throw error;
+    }
+  },
+
+  // FUNÇÕES DE COMENTÁRIOS
+  async addComment(orderId, commentText, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Buscar pedido atual
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      const orderData = orderDoc.data();
+      const currentComments = orderData.comentarios || [];
+
+      // Criar novo comentário
+      const newComment = {
+        id: Date.now().toString(),
+        texto: commentText,
+        autor: userInfo.name || userInfo.email || "Usuário não identificado",
+        autorEmail: userInfo.email || "email@naoidentificado.com",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Adicionar comentário à lista
+      const updatedComments = [...currentComments, newComment];
+
+      // Atualizar pedido
+      await updateDoc(orderRef, {
+        comentarios: updatedComments,
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        comment: newComment,
+        message: "Comentário adicionado com sucesso!",
+      };
+    } catch (error) {
+      console.error("Erro ao adicionar comentário:", error);
+      throw error;
+    }
+  },
+
+  async getComments(orderId) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
       const orderDoc = await getDoc(orderRef);
 
       if (!orderDoc.exists()) {
@@ -510,20 +567,55 @@ export const ordersService = {
       }
 
       const orderData = orderDoc.data();
+      return orderData.comentarios || [];
+    } catch (error) {
+      console.error("Erro ao buscar comentários:", error);
+      throw error;
+    }
+  },
 
-      // Deletar o documento do Firebase
-      await deleteDoc(orderRef);
+  async deleteComment(orderId, commentId, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Buscar pedido atual
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      const orderData = orderDoc.data();
+      const currentComments = orderData.comentarios || [];
+
+      // Encontrar comentário para verificar permissões
+      const comment = currentComments.find((c) => c.id === commentId);
+      if (!comment) {
+        throw new Error("Comentário não encontrado");
+      }
+
+      // Verificar se o usuário pode deletar (autor do comentário ou admin principal)
+      const canDelete =
+        comment.autorEmail === userInfo.email || userInfo.isMainAdmin;
+
+      if (!canDelete) {
+        throw new Error("Você não tem permissão para deletar este comentário");
+      }
+
+      // Remover comentário
+      const updatedComments = currentComments.filter((c) => c.id !== commentId);
+
+      // Atualizar pedido
+      await updateDoc(orderRef, {
+        comentarios: updatedComments,
+        updatedAt: serverTimestamp(),
+      });
 
       return {
         success: true,
-        message: `Pedido ${orderId
-          .slice(-8)
-          .toUpperCase()} deletado permanentemente`,
-        orderId: orderId,
-        orderData: orderData,
+        message: "Comentário deletado com sucesso!",
       };
     } catch (error) {
-      console.error("Erro ao deletar pedido:", error);
+      console.error("Erro ao deletar comentário:", error);
       throw error;
     }
   },

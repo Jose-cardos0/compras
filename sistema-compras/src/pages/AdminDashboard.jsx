@@ -36,6 +36,51 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import FileViewer from "../components/FileViewer";
 
+// Componente separado para textarea de comentários para evitar re-renders
+const CommentTextarea = ({ orderId, onSubmit, currentUserName }) => {
+  const [localComment, setLocalComment] = useState("");
+
+  const handleSubmit = () => {
+    if (localComment.trim()) {
+      onSubmit(orderId, localComment.trim());
+      setLocalComment("");
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" && e.ctrlKey) {
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div className="border-t border-gray-200 pt-4">
+      <div className="space-y-3">
+        <div className="text-xs text-gray-500">
+          Comentando como: {currentUserName}
+        </div>
+        <textarea
+          value={localComment}
+          onChange={(e) => setLocalComment(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Escreva um comentário... (Ctrl+Enter para enviar)"
+          rows={2}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+        />
+        <div className="flex justify-end">
+          <button
+            onClick={handleSubmit}
+            disabled={!localComment.trim()}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Comentar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +91,7 @@ const AdminDashboard = () => {
   const [additionalData, setAdditionalData] = useState({});
   const [filterStatus, setFilterStatus] = useState("");
   const [filterById, setFilterById] = useState("");
+  const [filterBySolicitante, setFilterBySolicitante] = useState("");
   const [filterByResponsible, setFilterByResponsible] = useState("");
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [isProductUpdate, setIsProductUpdate] = useState(false);
@@ -62,6 +108,12 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [deleteModal, setDeleteModal] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
+
+  // Estados para comentários
+  const [showComments, setShowComments] = useState({}); // {orderId: true/false}
+  const [comments, setComments] = useState({}); // {orderId: [comments]}
+  const [loadingComments, setLoadingComments] = useState({}); // {orderId: true/false}
+  const [commentCounts, setCommentCounts] = useState({}); // {orderId: number} - apenas contagem
 
   const {
     currentUser,
@@ -139,6 +191,27 @@ const AdminDashboard = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Carregar apenas contagem de comentários (não o conteúdo completo)
+  useEffect(() => {
+    const loadCommentCounts = async () => {
+      if (orders.length === 0) return;
+
+      const counts = {};
+      for (const order of orders) {
+        try {
+          const orderComments = await ordersService.getComments(order.id);
+          counts[order.id] = orderComments.length;
+        } catch (error) {
+          console.error(`Erro ao carregar contagem de comentários:`, error);
+          counts[order.id] = 0;
+        }
+      }
+      setCommentCounts(counts);
+    };
+
+    loadCommentCounts();
+  }, [orders]);
 
   // Buscar usuários cadastrados
   useEffect(() => {
@@ -389,7 +462,15 @@ const AdminDashboard = () => {
           .toLowerCase()
           .includes(filterByResponsible.toLowerCase())
       : true;
-    return matchesStatus && matchesId && matchesResponsible;
+    const matchesSolicitante = filterBySolicitante
+      ? order.nomeCompleto &&
+        order.nomeCompleto
+          .toLowerCase()
+          .includes(filterBySolicitante.toLowerCase())
+      : true;
+    return (
+      matchesStatus && matchesId && matchesResponsible && matchesSolicitante
+    );
   });
 
   // Função para filtrar por status clicando nas estatísticas
@@ -630,6 +711,132 @@ const AdminDashboard = () => {
     }
   };
 
+  // Funções para Comentários
+  const toggleComments = async (orderId) => {
+    const isCurrentlyOpen = showComments[orderId];
+
+    if (isCurrentlyOpen) {
+      // Fechar comentários
+      setShowComments((prev) => ({ ...prev, [orderId]: false }));
+    } else {
+      // Abrir comentários e carregar se necessário
+      setShowComments((prev) => ({ ...prev, [orderId]: true }));
+
+      if (!comments[orderId]) {
+        // Carregar comentários do Firebase
+        setLoadingComments((prev) => ({ ...prev, [orderId]: true }));
+        try {
+          const orderComments = await ordersService.getComments(orderId);
+          setComments((prev) => ({ ...prev, [orderId]: orderComments }));
+        } catch (error) {
+          console.error("Erro ao carregar comentários:", error);
+          toast.error("Erro ao carregar comentários");
+        } finally {
+          setLoadingComments((prev) => ({ ...prev, [orderId]: false }));
+        }
+      }
+    }
+  };
+
+  const addComment = async (orderId, commentText) => {
+    if (!commentText || !commentText.trim()) {
+      toast.error("Digite um comentário");
+      return;
+    }
+
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+        isMainAdmin: userPermissions?.isMainAdmin || false,
+      };
+
+      const result = await ordersService.addComment(
+        orderId,
+        commentText.trim(),
+        userInfo
+      );
+
+      if (result.success) {
+        // Atualizar comentários localmente
+        setComments((prev) => ({
+          ...prev,
+          [orderId]: [...(prev[orderId] || []), result.comment],
+        }));
+
+        // Atualizar contagem de comentários
+        setCommentCounts((prev) => ({
+          ...prev,
+          [orderId]: (prev[orderId] || 0) + 1,
+        }));
+
+        toast.success("Comentário adicionado!");
+      }
+    } catch (error) {
+      console.error("Erro ao adicionar comentário:", error);
+      toast.error("Erro ao adicionar comentário");
+    }
+  };
+
+  const deleteComment = async (orderId, commentId) => {
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+        isMainAdmin: userPermissions?.isMainAdmin || false,
+      };
+
+      const result = await ordersService.deleteComment(
+        orderId,
+        commentId,
+        userInfo
+      );
+
+      if (result.success) {
+        // Atualizar comentários localmente
+        setComments((prev) => ({
+          ...prev,
+          [orderId]: (prev[orderId] || []).filter(
+            (comment) => comment.id !== commentId
+          ),
+        }));
+
+        // Atualizar contagem de comentários
+        setCommentCounts((prev) => ({
+          ...prev,
+          [orderId]: Math.max((prev[orderId] || 0) - 1, 0),
+        }));
+
+        toast.success("Comentário deletado!");
+      }
+    } catch (error) {
+      console.error("Erro ao deletar comentário:", error);
+      toast.error(error.message || "Erro ao deletar comentário");
+    }
+  };
+
+  const formatCommentDate = (date) => {
+    if (!date) return "";
+
+    const commentDate = new Date(date);
+
+    // Formato mais detalhado da data
+    return (
+      commentDate.toLocaleDateString("pt-BR") +
+      " às " +
+      commentDate.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
@@ -824,6 +1031,14 @@ const AdminDashboard = () => {
               <div className="flex items-center space-x-3 max-md:flex-col max-md:space-x-0 max-md:space-y-2">
                 <input
                   type="text"
+                  placeholder="Buscar por Solicitante..."
+                  value={filterBySolicitante}
+                  onChange={(e) => setFilterBySolicitante(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48"
+                />
+
+                <input
+                  type="text"
                   placeholder="Buscar por ID..."
                   value={filterById}
                   onChange={(e) => setFilterById(e.target.value)}
@@ -944,6 +1159,18 @@ const AdminDashboard = () => {
                               <span>Produtos</span>
                             </button>
                           )}
+                          {/* <button
+                            onClick={() => toggleComments(order.id)}
+                            className="flex items-center space-x-2 bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-200 transition-colors"
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            <span className="max-md:hidden">Comentários</span>
+                            {commentCounts[order.id] > 0 && (
+                              <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                                {commentCounts[order.id]}
+                              </span>
+                            )}
+                          </button> */}
                           <button
                             onClick={() => openStatusModal(order)}
                             className="flex max-md:hidden items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -1297,6 +1524,109 @@ const AdminDashboard = () => {
                           </p>
                         </div>
                       )}
+
+                      {/* Seção de Comentários */}
+                      <div className="border-t border-gray-200">
+                        <button
+                          onClick={() => toggleComments(order.id)}
+                          className="w-full px-6 py-3 flex items-center justify-between text-left bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <MessageSquare className="h-5 w-5 text-gray-600" />
+                            <span className="font-medium text-gray-700">
+                              Comentários
+                            </span>
+                            {commentCounts[order.id] > 0 && (
+                              <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                                {commentCounts[order.id]}
+                              </span>
+                            )}
+                          </div>
+                          {showComments[order.id] ? (
+                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-gray-400" />
+                          )}
+                        </button>
+
+                        {showComments[order.id] && (
+                          <div className="px-6 py-4 bg-white border-t border-gray-200">
+                            {/* Comentários existentes */}
+                            {loadingComments[order.id] ? (
+                              <div className="text-center py-4">
+                                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                <p className="text-sm text-gray-500 mt-2">
+                                  Carregando comentários...
+                                </p>
+                              </div>
+                            ) : (
+                              <>
+                                {comments[order.id] &&
+                                comments[order.id].length > 0 ? (
+                                  <div className="space-y-3 mb-4">
+                                    {comments[order.id].map((comment) => (
+                                      <div
+                                        key={comment.id}
+                                        className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                                      >
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center space-x-2">
+                                            <span className="font-medium text-gray-900 text-sm">
+                                              {comment.autor}
+                                            </span>
+                                            <span className="text-xs text-gray-500">
+                                              {formatCommentDate(
+                                                comment.createdAt
+                                              )}
+                                            </span>
+                                          </div>
+                                          {(comment.autorEmail ===
+                                            currentUser?.email ||
+                                            userPermissions?.isMainAdmin) && (
+                                            <button
+                                              onClick={() =>
+                                                deleteComment(
+                                                  order.id,
+                                                  comment.id
+                                                )
+                                              }
+                                              className="text-red-600 hover:text-red-800 text-xs"
+                                              title="Deletar comentário"
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        <p className="text-sm text-gray-700 break-words">
+                                          {comment.texto}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-gray-500">
+                                    <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                                    <p className="text-sm">
+                                      Nenhum comentário ainda
+                                    </p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+
+                            {/* Adicionar novo comentário */}
+                            <CommentTextarea
+                              orderId={order.id}
+                              onSubmit={addComment}
+                              currentUserName={
+                                userPermissions?.name ||
+                                currentUser?.displayName ||
+                                currentUser?.email
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
 
                       {/* Rodapé com marcador de responsável */}
                       <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">

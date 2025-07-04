@@ -250,6 +250,9 @@ const OrderForm = () => {
     }
   };
 
+  const removerAcentos = (texto) =>
+    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header com Logo */}
@@ -326,7 +329,15 @@ const OrderForm = () => {
                   <input
                     {...register("nomeCompleto", {
                       required: "Nome completo é obrigatório",
+                      // pattern: {
+                      //   value: /^[A-Za-z\s]+$/, // letras sem acento e espaços
+                      //   message: "Não use acentos ou caracteres especiais",
+                      // },
                     })}
+                    onChange={(e) => {
+                      const textoLimpo = removerAcentos(e.target.value);
+                      e.target.value = textoLimpo;
+                    }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                     placeholder="Digite seu nome completo"
                   />
