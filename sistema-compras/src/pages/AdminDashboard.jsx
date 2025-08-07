@@ -31,6 +31,7 @@ import {
   UserCheck,
   Tag,
   Trash2,
+  Database,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -693,9 +694,7 @@ const AdminDashboard = () => {
             <p className="font-semibold mb-2">
               Pedido deletado permanentemente!
             </p>
-            <p className="text-gray-600 text-xs">
-              ID: {result.orderId.slice(-8).toUpperCase()}
-            </p>
+            <p className="text-gray-600 text-xs">ID: {result.orderId}</p>
           </div>,
           { duration: 5000 }
         );
@@ -872,6 +871,15 @@ const AdminDashboard = () => {
                 >
                   <Users className="h-5 w-5" />
                   <span className="max-md:hidden">Gerenciar Usuários</span>
+                </button>
+              )}
+              {userPermissions?.isMainAdmin && (
+                <button
+                  onClick={() => navigate("/admin/migration")}
+                  className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Database className="h-5 w-5" />
+                  <span className="max-md:hidden">Migração de IDs</span>
                 </button>
               )}
               <button
@@ -1137,7 +1145,7 @@ const AdminDashboard = () => {
                                 className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
                                font-medium bg-blue-100 text-blue-800 max-md:bg-white"
                               >
-                                ID: {order.id.slice(-8).toUpperCase()}
+                                ID: {order.id}
                               </span>
                             </div>
                             <p className="text-sm text-gray-600">
@@ -1209,7 +1217,7 @@ const AdminDashboard = () => {
                         <div className="flex items-center space-x-2">
                           <Package className="h-4 w-4 text-gray-500" />
                           <span className="text-sm text-gray-700">
-                            ID: {order.id.slice(-12).toUpperCase()}
+                            ID: {order.id}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -1895,7 +1903,7 @@ const AdminDashboard = () => {
 
                   <div className="bg-gray-50 p-4 rounded-lg mb-4">
                     <h5 className="font-semibold text-gray-800 mb-2">
-                      Pedido: {orderToCancel.id.slice(-8).toUpperCase()}
+                      Pedido: {orderToCancel.id}
                     </h5>
                     <p className="text-sm text-gray-600 mb-1">
                       Cliente: <strong>{orderToCancel.nomeCompleto}</strong>
@@ -2004,8 +2012,7 @@ const AdminDashboard = () => {
 
                   <div className="bg-gray-50 p-4 rounded-lg mb-4">
                     <h5 className="font-semibold text-gray-800 mb-2">
-                      Pedido:{" "}
-                      {selectedOrderForResponsible.id.slice(-8).toUpperCase()}
+                      Pedido: {selectedOrderForResponsible.id}
                     </h5>
                     <p className="text-sm text-gray-600 mb-1">
                       Cliente:{" "}
@@ -2125,7 +2132,7 @@ const AdminDashboard = () => {
 
                   <div className="bg-gray-50 p-4 rounded-lg mb-4">
                     <h5 className="font-semibold text-gray-800 mb-2">
-                      Pedido: {orderToDelete.id.slice(-8).toUpperCase()}
+                      Pedido: {orderToDelete.id}
                     </h5>
                     <p className="text-sm text-gray-600 mb-1">
                       Cliente: <strong>{orderToDelete.nomeCompleto}</strong>

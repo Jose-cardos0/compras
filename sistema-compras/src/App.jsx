@@ -13,6 +13,7 @@ import OrderForm from "./pages/OrderForm";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
+import MigrationPage from "./pages/MigrationPage";
 
 function App() {
   return (
@@ -41,6 +42,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminUsers />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/migration"
+              element={
+                <ProtectedRoute>
+                  <MigrationPage />
                 </ProtectedRoute>
               }
             />

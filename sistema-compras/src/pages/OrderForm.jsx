@@ -207,7 +207,7 @@ const OrderForm = () => {
             <p className="text-gray-600 text-xs mb-2">
               ID do Pedido:{" "}
               <span className="font-mono font-bold text-blue-600">
-                {result.id.slice(-8).toUpperCase()}
+                {result.id}
               </span>
             </p>
             <p className="text-gray-600 text-xs mb-2">
@@ -233,9 +233,7 @@ const OrderForm = () => {
         );
       } else {
         toast.success(
-          `Pedido ${result.id.slice(-8).toUpperCase()} com ${
-            data.produtos.length
-          } produto(s) e ${totalFiles} arquivo(s) enviado com sucesso! Admin notificado. Você receberá atualizações de status no WhatsApp.`
+          `Pedido ${result.id} com ${data.produtos.length} produto(s) e ${totalFiles} arquivo(s) enviado com sucesso! Admin notificado. Você receberá atualizações de status no WhatsApp.`
         );
       }
 

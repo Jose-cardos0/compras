@@ -12,6 +12,7 @@ import {
   where,
   getDoc,
   setDoc,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { sendWhatsAppMessage, generateWhatsAppLink } from "./whatsapp";
@@ -23,6 +24,36 @@ import { auth } from "../firebase/config";
 
 // Serviços para Pedidos
 export const ordersService = {
+  // Função para gerar ID numérico sequencial
+  async generateSequentialId() {
+    try {
+      // Referência para o documento que controla os IDs sequenciais
+      const counterRef = doc(db, "counters", "orderIds");
+
+      // Usar transação para garantir atomicidade
+      const result = await db.runTransaction(async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+
+        let currentId = 1;
+        if (counterDoc.exists()) {
+          currentId = counterDoc.data().currentId + 1;
+        }
+
+        // Atualizar o contador
+        transaction.set(counterRef, { currentId }, { merge: true });
+
+        return currentId;
+      });
+
+      // Retornar ID formatado com zeros à esquerda (ex: 0001, 0002, etc.)
+      return result.toString().padStart(4, "0");
+    } catch (error) {
+      console.error("Erro ao gerar ID sequencial:", error);
+      // Fallback: usar timestamp se falhar
+      return Date.now().toString().slice(-4);
+    }
+  },
+
   // Função para formatar data no formato brasileiro (DD/MM/YYYY)
   formatDateToBR(dateString) {
     if (!dateString) return "";
@@ -52,8 +83,14 @@ export const ordersService = {
   // Criar novo pedido
   async createOrder(orderData) {
     try {
-      const docRef = await addDoc(collection(db, "orders"), {
+      // Gerar ID numérico sequencial
+      const sequentialId = await this.generateSequentialId();
+
+      // Criar documento com ID personalizado
+      const orderRef = doc(db, "orders", sequentialId);
+      await setDoc(orderRef, {
         ...orderData,
+        orderNumber: sequentialId, // Manter o número do pedido nos dados
         status: "pendente",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -61,9 +98,7 @@ export const ordersService = {
 
       // Criar mensagem específica para o ADMIN sobre novo pedido
       let adminMessage = `❗ *NOVO PEDIDO RECEBIDO!*\n\n`;
-      adminMessage += `*ID do Pedido:* ${docRef.id
-        .slice(-8)
-        .toUpperCase()}\n\n`;
+      adminMessage += `*ID do Pedido:* ${sequentialId}\n\n`;
       adminMessage += `*Cliente:* ${orderData.nomeCompleto}\n`;
       adminMessage += `*Setor:* ${orderData.setor}\n`;
       adminMessage += `*WhatsApp:* ${orderData.whatsapp}\n`;
@@ -92,7 +127,7 @@ export const ordersService = {
       const result = await sendWhatsAppMessage("79991820085", adminMessage);
 
       return {
-        id: docRef.id,
+        id: sequentialId,
         whatsappResult: result,
       };
     } catch (error) {
@@ -276,9 +311,7 @@ export const ordersService = {
 
   // Enviar notificação de status do pedido geral
   async sendOrderStatusNotification(orderData, status, additionalData) {
-    let message = `❗ *Atualização do Pedido Geral*\n\nOlá ${
-      orderData.nomeCompleto
-    }!\n\n *ID do Pedido:* ${orderData.id.slice(-8).toUpperCase()}\n\n`;
+    let message = `❗ *Atualização do Pedido Geral*\n\nOlá ${orderData.nomeCompleto}!\n\n *ID do Pedido:* ${orderData.id}\n\n`;
 
     // Mostrar resumo do pedido
     if (orderData.produtos && orderData.produtos.length > 0) {
@@ -330,9 +363,7 @@ export const ordersService = {
     status,
     additionalData
   ) {
-    let message = `❗ *Atualização de Produto*\n\nOlá ${
-      orderData.nomeCompleto
-    }!\n\n *ID do Pedido:* ${orderData.id.slice(-8).toUpperCase()}\n\n`;
+    let message = `❗ *Atualização de Produto*\n\nOlá ${orderData.nomeCompleto}!\n\n *ID do Pedido:* ${orderData.id}\n\n`;
     message += `*Produto:* ${product.produto}\n`;
 
     switch (status) {
@@ -466,7 +497,7 @@ export const ordersService = {
 
       // Criar mensagem de notificação para o cliente
       let message = `✗ *PEDIDO CANCELADO*\n\n`;
-      message += `*ID do Pedido:* ${orderId.slice(-8).toUpperCase()}\n\n`;
+      message += `*ID do Pedido:* ${orderId}\n\n`;
       message += `Olá ${orderData.nomeCompleto}!\n\n`;
       message += `Infelizmente seu pedido foi cancelado completamente.\n\n`;
 
