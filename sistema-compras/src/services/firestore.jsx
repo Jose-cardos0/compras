@@ -80,6 +80,30 @@ export const ordersService = {
     return dateString;
   },
 
+  // Obter emoji do status
+  getStatusEmoji(status) {
+    const statusEmojis = {
+      pendente: "⏳",
+      em_analise: "✓",
+      em_andamento: "⚡",
+      cancelado: "✗",
+      entregue: "✓",
+    };
+    return statusEmojis[status] || "❓";
+  },
+
+  // Obter label do status
+  getStatusLabel(status) {
+    const statusLabels = {
+      pendente: "Pendente",
+      em_analise: "Em Análise",
+      em_andamento: "Em Andamento",
+      cancelado: "Cancelado/Negado",
+      entregue: "Entregue",
+    };
+    return statusLabels[status] || status;
+  },
+
   // Criar novo pedido
   async createOrder(orderData) {
     try {
@@ -348,8 +372,22 @@ export const ordersService = {
         message += `*Status Geral:* ${status}`;
     }
 
-    // Adicionar informação sobre produtos quando há múltiplos produtos
-    if (orderData.produtos && orderData.produtos.length > 1) {
+    // Adicionar lista detalhada dos produtos com seus status atualizados
+    if (orderData.produtos && orderData.produtos.length > 0) {
+      message += `\n\n📦 *Produtos do Pedido:*\n`;
+
+      orderData.produtos.forEach((produto, index) => {
+        const statusEmoji = this.getStatusEmoji(status);
+        const statusLabel = this.getStatusLabel(status);
+
+        message += `\n${index + 1}. *${produto.produto}*`;
+        message += `\n   • Quantidade: ${produto.quantidade}`;
+        if (produto.especificacoes) {
+          message += `\n   • Especificações: ${produto.especificacoes}`;
+        }
+        message += `\n   • Status: ${statusEmoji} ${statusLabel}`;
+      });
+
       message += `\n\n⚠ *Importante:* Todos os ${orderData.produtos.length} produtos deste pedido tiveram seus status atualizados para o status geral.`;
     }
 
@@ -540,6 +578,93 @@ export const ordersService = {
       };
     } catch (error) {
       console.error("Erro ao deletar pedido:", error);
+      throw error;
+    }
+  },
+
+  // FUNÇÕES DE OBSERVAÇÕES SIMPLES (etiqueta)
+  async addObservation(orderId, observationText, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Buscar pedido atual
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      // Atualizar pedido com observação simples
+      await updateDoc(orderRef, {
+        observacao: observationText,
+        observacaoAutor:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        observacaoData: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        message: "Observação adicionada com sucesso!",
+      };
+    } catch (error) {
+      console.error("Erro ao adicionar observação:", error);
+      throw error;
+    }
+  },
+
+  async updateObservation(orderId, newText, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Buscar pedido atual
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      // Atualizar observação
+      await updateDoc(orderRef, {
+        observacao: newText,
+        observacaoAutor:
+          userInfo.name || userInfo.email || "Usuário não identificado",
+        observacaoData: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        message: "Observação atualizada com sucesso!",
+      };
+    } catch (error) {
+      console.error("Erro ao atualizar observação:", error);
+      throw error;
+    }
+  },
+
+  async deleteObservation(orderId, userInfo = {}) {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+
+      // Buscar pedido atual
+      const orderDoc = await getDoc(orderRef);
+      if (!orderDoc.exists()) {
+        throw new Error("Pedido não encontrado");
+      }
+
+      // Remover observação (definir como null)
+      await updateDoc(orderRef, {
+        observacao: null,
+        observacaoAutor: null,
+        observacaoData: null,
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        message: "Observação removida com sucesso!",
+      };
+    } catch (error) {
+      console.error("Erro ao remover observação:", error);
       throw error;
     }
   },

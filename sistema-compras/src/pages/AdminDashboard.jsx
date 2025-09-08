@@ -110,6 +110,14 @@ const AdminDashboard = () => {
   const [deleteModal, setDeleteModal] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
+  // Estados para observações simples
+  const [observationModal, setObservationModal] = useState(false);
+  const [selectedOrderForObservation, setSelectedOrderForObservation] =
+    useState(null);
+  const [newObservation, setNewObservation] = useState("");
+  const [observationViewMode, setObservationViewMode] = useState("tag"); // tag, card, list
+  const [isEditingObservation, setIsEditingObservation] = useState(false);
+
   // Estados para comentários
   const [showComments, setShowComments] = useState({}); // {orderId: true/false}
   const [comments, setComments] = useState({}); // {orderId: [comments]}
@@ -557,6 +565,86 @@ const AdminDashboard = () => {
       (r) => r.name === responsibleName
     );
     return responsible ? responsible.color : "bg-gray-400";
+  };
+
+  // Funções para Observações Simples
+  const openObservationModal = (order) => {
+    setSelectedOrderForObservation(order);
+    setNewObservation(order.observacao || "");
+    setObservationModal(true);
+  };
+
+  const handleObservationUpdate = async () => {
+    if (!selectedOrderForObservation) return;
+
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
+      if (selectedOrderForObservation.observacao) {
+        // Atualizar observação existente
+        await ordersService.updateObservation(
+          selectedOrderForObservation.id,
+          newObservation,
+          userInfo
+        );
+        toast.success("Observação atualizada com sucesso!");
+      } else {
+        // Adicionar nova observação
+        await ordersService.addObservation(
+          selectedOrderForObservation.id,
+          newObservation,
+          userInfo
+        );
+        toast.success("Observação adicionada com sucesso!");
+      }
+
+      // Fechar modal e recarregar página para garantir dados atualizados
+      setObservationModal(false);
+      setSelectedOrderForObservation(null);
+      setNewObservation("");
+
+      // Recarregar a página para garantir que os dados estejam atualizados
+      window.location.reload();
+    } catch (error) {
+      console.error("Erro ao atualizar observação:", error);
+      toast.error("Erro ao atualizar observação");
+    }
+  };
+
+  const handleObservationDelete = async () => {
+    if (!selectedOrderForObservation) return;
+
+    try {
+      const userInfo = {
+        email: currentUser?.email,
+        name:
+          userPermissions?.name ||
+          currentUser?.displayName ||
+          currentUser?.email,
+      };
+
+      await ordersService.deleteObservation(
+        selectedOrderForObservation.id,
+        userInfo
+      );
+
+      toast.success("Observação removida com sucesso!");
+      setObservationModal(false);
+      setSelectedOrderForObservation(null);
+      setNewObservation("");
+
+      // Recarregar a página para garantir que os dados estejam atualizados
+      window.location.reload();
+    } catch (error) {
+      console.error("Erro ao remover observação:", error);
+      toast.error("Erro ao remover observação");
+    }
   };
 
   // Função para calcular e formatar a data prevista de chegada
@@ -1259,6 +1347,16 @@ const AdminDashboard = () => {
                             <p>
                               <strong>Por:</strong> {order.lastModifiedBy}
                             </p>
+                            {order.motivoCancelamento && (
+                              <p>
+                                <strong className="text-red-600">
+                                  Motivo do cancelamento:
+                                </strong>{" "}
+                                <span className="text-red-600 font-medium">
+                                  {order.motivoCancelamento}
+                                </span>
+                              </p>
+                            )}
                             {order.lastModifiedAt && (
                               <p>
                                 <strong>Em:</strong>{" "}
@@ -1457,6 +1555,16 @@ const AdminDashboard = () => {
                                             <strong>Por:</strong>{" "}
                                             {produto.lastModifiedBy}
                                           </p>
+                                          {produto.motivoCancelamento && (
+                                            <p>
+                                              <strong>
+                                                Motivo do cancelamento:
+                                              </strong>{" "}
+                                              <span className="text-red-600 font-medium">
+                                                {produto.motivoCancelamento}
+                                              </span>
+                                            </p>
+                                          )}
                                           {produto.lastModifiedAt && (
                                             <p>
                                               <strong>Em:</strong>{" "}
@@ -1521,17 +1629,6 @@ const AdminDashboard = () => {
                           </p>
                         </div>
                       )} */}
-
-                      {order.motivoCancelamento && (
-                        <div className="mt-3">
-                          <h4 className="font-medium text-gray-900 mb-1">
-                            Motivo do Cancelamento:
-                          </h4>
-                          <p className="text-sm text-red-700 bg-red-50 p-3 rounded-lg">
-                            {order.motivoCancelamento}
-                          </p>
-                        </div>
-                      )}
 
                       {/* Seção de Comentários */}
                       <div className="border-t border-gray-200">
@@ -1636,40 +1733,194 @@ const AdminDashboard = () => {
                         )}
                       </div>
 
-                      {/* Rodapé com marcador de responsável */}
+                      {/* Rodapé com marcador de responsável e observação */}
                       <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <UserCheck className="h-5 w-5 text-gray-500" />
-                            <span className="text-sm max-md:hidden font-medium text-gray-700">
-                              Responsável:
-                            </span>
-                            {order.responsavel ? (
-                              <div className="flex items-center space-x-2">
-                                <div
-                                  className={`w-3 h-3 rounded-full ${getResponsibleColor(
-                                    order.responsavel
-                                  )}`}
-                                ></div>
-                                <span className="text-sm font-medium text-gray-900">
-                                  {order.responsavel}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-500">
-                                Não atribuído
+                        <div className="space-y-3">
+                          {/* Responsável */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <UserCheck className="h-5 w-5 text-gray-500" />
+                              <span className="text-sm max-md:hidden font-medium text-gray-700">
+                                Responsável:
                               </span>
+                              {order.responsavel ? (
+                                <div className="flex items-center space-x-2">
+                                  <div
+                                    className={`w-3 h-3 rounded-full ${getResponsibleColor(
+                                      order.responsavel
+                                    )}`}
+                                  ></div>
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {order.responsavel}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-500">
+                                  Não atribuído
+                                </span>
+                              )}
+                            </div>
+                            {userPermissions?.isMainAdmin && (
+                              <button
+                                onClick={() => openResponsibleModal(order)}
+                                className="flex items-center space-x-2 bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                              >
+                                <Tag className="h-4 w-4" />
+                                <span>Marcar</span>
+                              </button>
                             )}
                           </div>
-                          {userPermissions?.isMainAdmin && (
-                            <button
-                              onClick={() => openResponsibleModal(order)}
-                              className="flex items-center space-x-2 bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm"
-                            >
-                              <Tag className="h-4 w-4" />
-                              <span>Marcar</span>
-                            </button>
-                          )}
+
+                          {/* Observação - Sistema Avançado */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <FileText className="h-5 w-5 text-gray-500" />
+                                <span className="text-sm font-medium text-gray-700">
+                                  Observação
+                                </span>
+                                {order.observacao && (
+                                  <div className="flex items-center space-x-1">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span className="text-xs text-blue-600 font-medium">
+                                      {order.observacaoAutor &&
+                                        `por ${order.observacaoAutor}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                {/* Botões de visualização */}
+                                <div className="flex items-center space-x-1 bg-gray-100 rounded-md p-1">
+                                  <button
+                                    onClick={() =>
+                                      setObservationViewMode("tag")
+                                    }
+                                    className={`px-2 py-1 text-xs rounded ${
+                                      observationViewMode === "tag"
+                                        ? "bg-white shadow-sm text-blue-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                    }`}
+                                    title="Visualização em etiqueta"
+                                  >
+                                    🏷️
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setObservationViewMode("card")
+                                    }
+                                    className={`px-2 py-1 text-xs rounded ${
+                                      observationViewMode === "card"
+                                        ? "bg-white shadow-sm text-blue-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                    }`}
+                                    title="Visualização em card"
+                                  >
+                                    📋
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setObservationViewMode("list")
+                                    }
+                                    className={`px-2 py-1 text-xs rounded ${
+                                      observationViewMode === "list"
+                                        ? "bg-white shadow-sm text-blue-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                    }`}
+                                    title="Visualização em lista"
+                                  >
+                                    📝
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => openObservationModal(order)}
+                                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors duration-200"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  <span>
+                                    {order.observacao ? "Editar" : "Adicionar"}
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Exibição da observação baseada no modo */}
+                            {order.observacao ? (
+                              <div className="mt-2">
+                                {observationViewMode === "tag" && (
+                                  <div className="inline-flex items-center space-x-2 bg-blue-50 border border-blue-200 rounded-full px-3 py-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span className="text-sm font-medium text-blue-800 max-w-xs truncate">
+                                      {order.observacao}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {observationViewMode === "card" && (
+                                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div className="flex items-start space-x-2">
+                                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-blue-800 font-medium">
+                                          {order.observacao}
+                                        </p>
+                                        {order.observacaoAutor && (
+                                          <p className="text-xs text-blue-600 mt-1">
+                                            por {order.observacaoAutor}
+                                          </p>
+                                        )}
+                                        {order.observacaoData && (
+                                          <p className="text-xs text-blue-500 mt-1">
+                                            {new Date(
+                                              order.observacaoData.seconds *
+                                                1000
+                                            ).toLocaleString("pt-BR")}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {observationViewMode === "list" && (
+                                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                    <div className="flex items-start space-x-3">
+                                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <FileText className="h-4 w-4 text-blue-600" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                          <h4 className="text-sm font-medium text-gray-900">
+                                            Observação
+                                          </h4>
+                                          {order.observacaoData && (
+                                            <span className="text-xs text-gray-500">
+                                              {new Date(
+                                                order.observacaoData.seconds *
+                                                  1000
+                                              ).toLocaleDateString("pt-BR")}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm text-gray-700 mt-1">
+                                          {order.observacao}
+                                        </p>
+                                        {order.observacaoAutor && (
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            por {order.observacaoAutor}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500 italic bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                Nenhuma observação adicionada
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Informação da Data Prevista de Chegada - só para pedidos em andamento */}
@@ -2080,6 +2331,142 @@ const AdminDashboard = () => {
                 >
                   <Tag className="h-4 w-4" />
                   <span>Marcar Responsável</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Observação */}
+      <AnimatePresence>
+        {observationModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  📝{" "}
+                  {selectedOrderForObservation?.observacao
+                    ? "Editar Observação"
+                    : "Adicionar Observação"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setObservationModal(false);
+                    setSelectedOrderForObservation(null);
+                    setNewObservation("");
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {selectedOrderForObservation && (
+                <div className="mb-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <h4 className="font-semibold text-blue-800">
+                        {selectedOrderForObservation.observacao
+                          ? "Editar Observação do Pedido"
+                          : "Adicionar Observação ao Pedido"}
+                      </h4>
+                    </div>
+                    <p className="text-sm text-blue-700">
+                      {selectedOrderForObservation.observacao
+                        ? "Modifique a observação existente. Ela será visível no rodapé do pedido."
+                        : "Adicione uma observação que ficará visível no rodapé do pedido com uma etiqueta azul."}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <h5 className="font-semibold text-gray-800 mb-2">
+                      Pedido: {selectedOrderForObservation.id}
+                    </h5>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Cliente:{" "}
+                      <strong>
+                        {selectedOrderForObservation.nomeCompleto}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Setor: {selectedOrderForObservation.setor}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observação
+                  </label>
+                  <textarea
+                    value={newObservation}
+                    onChange={(e) => setNewObservation(e.target.value)}
+                    placeholder="Digite sua observação aqui..."
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {newObservation && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                      <span className="text-sm font-medium text-gray-700">
+                        Etiqueta azul:{" "}
+                        {newObservation.length > 50
+                          ? newObservation.substring(0, 50) + "..."
+                          : newObservation}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                {selectedOrderForObservation?.observacao && (
+                  <button
+                    onClick={handleObservationDelete}
+                    className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Remover</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setObservationModal(false);
+                    setSelectedOrderForObservation(null);
+                    setNewObservation("");
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleObservationUpdate}
+                  disabled={!newObservation.trim()}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>
+                    {selectedOrderForObservation?.observacao
+                      ? "Atualizar"
+                      : "Adicionar"}
+                  </span>
                 </button>
               </div>
             </motion.div>
