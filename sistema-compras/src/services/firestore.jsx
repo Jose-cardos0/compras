@@ -138,6 +138,9 @@ export const ordersService = {
         } Solicitado${orderData.produtos.length > 1 ? "s" : ""}:*\n\n`;
         orderData.produtos.forEach((produto, index) => {
           adminMessage += `${index + 1}. *${produto.produto}*\n`;
+          adminMessage += `   Quantidade: ${produto.quantidade} ${
+            produto.metrica || "UN"
+          }\n`;
           adminMessage += `   Especificações: ${produto.especificacoes}\n`;
           adminMessage += `   Motivo: ${produto.motivo}\n\n`;
         });
@@ -381,7 +384,9 @@ export const ordersService = {
         const statusLabel = this.getStatusLabel(status);
 
         message += `\n${index + 1}. *${produto.produto}*`;
-        message += `\n   • Quantidade: ${produto.quantidade}`;
+        message += `\n   • Quantidade: ${produto.quantidade} ${
+          produto.metrica || "UN"
+        }`;
         if (produto.especificacoes) {
           message += `\n   • Especificações: ${produto.especificacoes}`;
         }

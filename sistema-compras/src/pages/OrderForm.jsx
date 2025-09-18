@@ -35,7 +35,13 @@ const OrderForm = () => {
   } = useForm({
     defaultValues: {
       produtos: [
-        { produto: "", especificacoes: "", motivo: "", quantidade: 1 },
+        {
+          produto: "",
+          especificacoes: "",
+          motivo: "",
+          quantidade: 1,
+          metrica: "UN",
+        },
       ], // Pelo menos 1 produto
     },
   });
@@ -70,7 +76,13 @@ const OrderForm = () => {
   ];
 
   const addProduct = () => {
-    append({ produto: "", especificacoes: "", motivo: "", quantidade: 1 });
+    append({
+      produto: "",
+      especificacoes: "",
+      motivo: "",
+      quantidade: 1,
+      metrica: "UN",
+    });
   };
 
   const removeProduct = (index) => {
@@ -127,7 +139,8 @@ const OrderForm = () => {
           produto.produto.trim() &&
           produto.especificacoes.trim() &&
           produto.motivo.trim() &&
-          produto.quantidade > 0
+          produto.quantidade > 0 &&
+          produto.metrica
       );
 
       if (!produtosValidos) {
@@ -455,29 +468,54 @@ const OrderForm = () => {
                           )}
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Quantidade *
-                          </label>
-                          <input
-                            {...register(`produtos.${index}.quantidade`, {
-                              required: "Quantidade é obrigatória",
-                              min: {
-                                value: 1,
-                                message: "Quantidade deve ser pelo menos 1",
-                              },
-                              valueAsNumber: true,
-                            })}
-                            type="number"
-                            min="1"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                            placeholder="Ex: 5"
-                          />
-                          {errors.produtos?.[index]?.quantidade && (
-                            <p className="text-red-500 text-sm mt-1">
-                              {errors.produtos[index].quantidade.message}
-                            </p>
-                          )}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Quantidade *
+                            </label>
+                            <input
+                              {...register(`produtos.${index}.quantidade`, {
+                                required: "Quantidade é obrigatória",
+                                min: {
+                                  value: 1,
+                                  message: "Quantidade deve ser pelo menos 1",
+                                },
+                                valueAsNumber: true,
+                              })}
+                              type="number"
+                              min="1"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                              placeholder="Ex: 5"
+                            />
+                            {errors.produtos?.[index]?.quantidade && (
+                              <p className="text-red-500 text-sm mt-1">
+                                {errors.produtos[index].quantidade.message}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Métrica *
+                            </label>
+                            <select
+                              {...register(`produtos.${index}.metrica`, {
+                                required: "Métrica é obrigatória",
+                              })}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                            >
+                              <option value="UN">UN (Unidade)</option>
+                              <option value="PC">PC (Peça)</option>
+                              <option value="MT">MT (Metro)</option>
+                              <option value="KG">KG (Quilograma)</option>
+                              <option value="LT">LT (Litro)</option>
+                            </select>
+                            {errors.produtos?.[index]?.metrica && (
+                              <p className="text-red-500 text-sm mt-1">
+                                {errors.produtos[index].metrica.message}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
                         <div>
