@@ -1421,7 +1421,8 @@ const AdminDashboard = () => {
                                         Quantidade:
                                       </p>
                                       <p className="text-sm text-gray-600 bg-white p-2 rounded">
-                                        {produto.quantidade}
+                                        {produto.quantidade}{" "}
+                                        {produto.metrica || "UN"}
                                       </p>
                                     </div>
                                     <div>
