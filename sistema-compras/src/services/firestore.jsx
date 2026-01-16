@@ -866,3 +866,337 @@ export const usersService = {
     }
   },
 };
+
+// Serviços para Solicitações de Cadastro de Usuários
+export const registrationRequestsService = {
+  // Criar solicitação de cadastro
+  async createRegistrationRequest(requestData) {
+    try {
+      // Verificar se já existe uma solicitação com este email
+      const existingRequest = await this.getRequestByEmail(requestData.email);
+      if (existingRequest) {
+        throw new Error("Já existe uma solicitação de cadastro com este email.");
+      }
+
+      // Verificar se já existe usuário aprovado com este email
+      const existingUser = await getDoc(doc(db, "appUsers", requestData.email));
+      if (existingUser.exists()) {
+        throw new Error("Já existe um usuário cadastrado com este email.");
+      }
+
+      // Criar a solicitação
+      const requestRef = doc(db, "registrationRequests", requestData.email);
+      await setDoc(requestRef, {
+        ...requestData,
+        status: "pendente", // pendente, aprovado, rejeitado
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        email: requestData.email,
+        message: "Solicitação de cadastro enviada com sucesso!",
+      };
+    } catch (error) {
+      console.error("Erro ao criar solicitação de cadastro:", error);
+      throw error;
+    }
+  },
+
+  // Buscar solicitação por email
+  async getRequestByEmail(email) {
+    try {
+      const requestRef = doc(db, "registrationRequests", email);
+      const requestDoc = await getDoc(requestRef);
+      if (requestDoc.exists()) {
+        return { id: requestDoc.id, ...requestDoc.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error("Erro ao buscar solicitação:", error);
+      throw error;
+    }
+  },
+
+  // Buscar todas as solicitações pendentes
+  async getPendingRequests() {
+    try {
+      // Buscar todas as solicitações e filtrar no cliente para evitar índice composto
+      const q = query(collection(db, "registrationRequests"));
+      const querySnapshot = await getDocs(q);
+      const requests = querySnapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter((r) => r.status === "pendente");
+      // Ordenar por data no cliente
+      return requests.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      console.error("Erro ao buscar solicitações pendentes:", error);
+      throw error;
+    }
+  },
+
+  // Buscar todas as solicitações
+  async getAllRequests() {
+    try {
+      const q = query(
+        collection(db, "registrationRequests"),
+        orderBy("createdAt", "desc")
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error("Erro ao buscar solicitações:", error);
+      throw error;
+    }
+  },
+
+  // Aprovar solicitação de cadastro
+  async approveRequest(email, approvedBy) {
+    try {
+      const requestRef = doc(db, "registrationRequests", email);
+      const requestDoc = await getDoc(requestRef);
+
+      if (!requestDoc.exists()) {
+        throw new Error("Solicitação não encontrada.");
+      }
+
+      const requestData = requestDoc.data();
+
+      // Criar usuário no appUsers (usuários do app)
+      const userRef = doc(db, "appUsers", email);
+      await setDoc(userRef, {
+        name: requestData.name,
+        email: requestData.email,
+        cpf: requestData.cpf,
+        setor: requestData.setor,
+        cargo: requestData.cargo,
+        photoURL: requestData.photoURL,
+        photoPath: requestData.photoPath,
+        role: "user",
+        isApproved: true,
+        approvedBy: approvedBy,
+        approvedAt: serverTimestamp(),
+        createdAt: requestData.createdAt,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Atualizar status da solicitação
+      await updateDoc(requestRef, {
+        status: "aprovado",
+        approvedBy: approvedBy,
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        message: "Usuário aprovado com sucesso!",
+        email: email,
+      };
+    } catch (error) {
+      console.error("Erro ao aprovar solicitação:", error);
+      throw error;
+    }
+  },
+
+  // Rejeitar solicitação de cadastro
+  async rejectRequest(email, rejectedBy, motivo = "") {
+    try {
+      const requestRef = doc(db, "registrationRequests", email);
+      const requestDoc = await getDoc(requestRef);
+
+      if (!requestDoc.exists()) {
+        throw new Error("Solicitação não encontrada.");
+      }
+
+      // Atualizar status da solicitação
+      await updateDoc(requestRef, {
+        status: "rejeitado",
+        rejectedBy: rejectedBy,
+        rejectedAt: serverTimestamp(),
+        motivoRejeicao: motivo,
+        updatedAt: serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        message: "Solicitação rejeitada.",
+        email: email,
+      };
+    } catch (error) {
+      console.error("Erro ao rejeitar solicitação:", error);
+      throw error;
+    }
+  },
+
+  // Deletar solicitação
+  async deleteRequest(email) {
+    try {
+      await deleteDoc(doc(db, "registrationRequests", email));
+      return { success: true };
+    } catch (error) {
+      console.error("Erro ao deletar solicitação:", error);
+      throw error;
+    }
+  },
+
+  // Escutar mudanças nas solicitações em tempo real
+  subscribeToRequests(callback) {
+    const q = query(
+      collection(db, "registrationRequests"),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const requests = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(requests);
+    });
+  },
+};
+
+// Serviços para Usuários do App (usuários normais, não admin)
+export const appUsersService = {
+  // Buscar usuário por email
+  async getUserByEmail(email) {
+    try {
+      const userRef = doc(db, "appUsers", email);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        return { id: userDoc.id, ...userDoc.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error("Erro ao buscar usuário:", error);
+      throw error;
+    }
+  },
+
+  // Buscar todos os usuários do app (aprovados e não aprovados)
+  async getAllApprovedUsers() {
+    try {
+      // Buscar todos os usuários sem filtro composto para evitar necessidade de índice
+      const q = query(collection(db, "appUsers"));
+      const querySnapshot = await getDocs(q);
+      const users = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      // Ordenar por data no cliente
+      return users.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error);
+      throw error;
+    }
+  },
+
+  // Atualizar usuário
+  async updateUser(email, userData) {
+    try {
+      const userRef = doc(db, "appUsers", email);
+      await updateDoc(userRef, {
+        ...userData,
+        updatedAt: serverTimestamp(),
+      });
+      return email;
+    } catch (error) {
+      console.error("Erro ao atualizar usuário:", error);
+      throw error;
+    }
+  },
+
+  // Desativar usuário
+  async deactivateUser(email) {
+    try {
+      const userRef = doc(db, "appUsers", email);
+      await updateDoc(userRef, {
+        isApproved: false,
+        deactivatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Erro ao desativar usuário:", error);
+      throw error;
+    }
+  },
+
+  // Reativar usuário
+  async reactivateUser(email) {
+    try {
+      const userRef = doc(db, "appUsers", email);
+      await updateDoc(userRef, {
+        isApproved: true,
+        reactivatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Erro ao reativar usuário:", error);
+      throw error;
+    }
+  },
+
+  // Buscar pedidos do usuário
+  async getUserOrders(userEmail) {
+    try {
+      // Buscar pedidos apenas pelo email do usuário (sem orderBy para evitar índice)
+      const q = query(
+        collection(db, "orders"),
+        where("userEmail", "==", userEmail)
+      );
+      const querySnapshot = await getDocs(q);
+      const orders = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      // Ordenar por data no cliente
+      return orders.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      console.error("Erro ao buscar pedidos do usuário:", error);
+      throw error;
+    }
+  },
+
+  // Escutar mudanças nos pedidos do usuário em tempo real
+  subscribeToUserOrders(userEmail, callback) {
+    // Usar apenas where sem orderBy para evitar necessidade de índice
+    const q = query(
+      collection(db, "orders"),
+      where("userEmail", "==", userEmail)
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const orders = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      // Ordenar por data no cliente
+      const sortedOrders = orders.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+      callback(sortedOrders);
+    });
+  },
+};

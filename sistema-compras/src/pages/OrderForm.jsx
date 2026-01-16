@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -16,24 +16,33 @@ import {
   Trash2,
   Paperclip,
   Image as ImageIcon,
+  LogOut,
+  LayoutDashboard,
 } from "lucide-react";
 import { ordersService } from "../services/firestore";
 import { validatePhoneNumber, formatPhoneNumber } from "../services/whatsapp";
 import FileUpload from "../components/FileUpload";
 import { storageService } from "../services/storage";
+import { useAuth } from "../contexts/AuthContext";
 
 const OrderForm = () => {
   const [loading, setLoading] = useState(false);
   const [productFiles, setProductFiles] = useState({}); // Armazenar arquivos por produto
   const navigate = useNavigate();
+  const { currentUser, appUserData, logout } = useAuth();
+
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
     control,
+    setValue,
   } = useForm({
     defaultValues: {
+      nomeCompleto: "",
+      setor: "",
+      whatsapp: "",
       produtos: [
         {
           produto: "",
@@ -45,6 +54,23 @@ const OrderForm = () => {
       ], // Pelo menos 1 produto
     },
   });
+
+  // Preencher campos com dados do usuário logado
+  useEffect(() => {
+    if (appUserData) {
+      setValue("nomeCompleto", appUserData.name || "");
+      setValue("setor", appUserData.setor || "");
+    }
+  }, [appUserData, setValue]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+    } catch (error) {
+      toast.error("Erro ao sair");
+    }
+  };
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -203,6 +229,11 @@ const OrderForm = () => {
         setorDestino:
           data.setorDestino === "Outro" ? data.setorOutro : data.setorDestino,
         produtos: produtosComArquivos,
+        // Adicionar informações do usuário logado
+        userEmail: currentUser?.email || "",
+        userName: appUserData?.name || data.nomeCompleto,
+        userSetor: appUserData?.setor || data.setor,
+        userCargo: appUserData?.cargo || "",
       };
 
       const result = await ordersService.createOrder(formattedData);
@@ -266,30 +297,63 @@ const OrderForm = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* Header com Logo */}
+      {/* Header com Logo e Usuário */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-6">
-            {/* Logo centralizada */}
-            <div className="flex-1 flex justify-center">
+          <div className="flex items-center justify-between py-4">
+            {/* Logo */}
+            <div className="flex items-center space-x-4">
               <img
                 src="https://i.ibb.co/DPCKjMYN/2024.webp"
                 alt="Logo da Empresa"
-                className="h-16 w-auto"
+                className="h-12 w-auto"
               />
             </div>
 
-            {/* Botão Admin no canto direito */}
-            <div className="absolute right-4">
+            {/* Usuário logado e ações */}
+            <div className="flex items-center space-x-4">
+              {/* Perfil do usuário */}
+              <div className="flex items-center space-x-3">
+                {appUserData?.photoURL ? (
+                  <img
+                    src={appUserData.photoURL}
+                    alt={appUserData.name}
+                    className="w-10 h-10 rounded-full object-cover border-2 border-blue-500"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                    <User className="h-5 w-5 text-white" />
+                  </div>
+                )}
+                <div className="hidden md:block">
+                  <p className="text-sm font-medium text-gray-800">
+                    {appUserData?.name || currentUser?.email}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {appUserData?.setor} • {appUserData?.cargo}
+                  </p>
+                </div>
+              </div>
+
+              {/* Botão Meus Pedidos */}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate("/admin/login")}
-                className="flex items-center space-x-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg shadow-md transition-all duration-200"
+                onClick={() => navigate("/dashboard")}
+                className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg shadow-md transition-all duration-200"
               >
-                <Shield className="h-4 w-4" />
-                <span className="text-sm font-medium">Admin</span>
+                <LayoutDashboard className="h-4 w-4" />
+                <span className="text-sm font-medium hidden sm:inline">Meus Pedidos</span>
               </motion.button>
+
+              {/* Botão de logout */}
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Sair"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
             </div>
           </div>
         </div>
@@ -340,21 +404,25 @@ const OrderForm = () => {
                   <input
                     {...register("nomeCompleto", {
                       required: "Nome completo é obrigatório",
-                      // pattern: {
-                      //   value: /^[A-Za-z\s]+$/, // letras sem acento e espaços
-                      //   message: "Não use acentos ou caracteres especiais",
-                      // },
                     })}
                     onChange={(e) => {
                       const textoLimpo = removerAcentos(e.target.value);
                       e.target.value = textoLimpo;
                     }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    readOnly={!!appUserData?.name}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      appUserData?.name ? "bg-gray-100 text-gray-600" : ""
+                    }`}
                     placeholder="Digite seu nome completo"
                   />
                   {errors.nomeCompleto && (
                     <p className="text-red-500 text-sm mt-1">
                       {errors.nomeCompleto.message}
+                    </p>
+                  )}
+                  {appUserData?.name && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Dados do seu cadastro
                     </p>
                   )}
                 </div>
@@ -365,12 +433,20 @@ const OrderForm = () => {
                   </label>
                   <input
                     {...register("setor", { required: "Setor é obrigatório" })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    readOnly={!!appUserData?.setor}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      appUserData?.setor ? "bg-gray-100 text-gray-600" : ""
+                    }`}
                     placeholder="Digite seu setor"
                   />
                   {errors.setor && (
                     <p className="text-red-500 text-sm mt-1">
                       {errors.setor.message}
+                    </p>
+                  )}
+                  {appUserData?.setor && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Dados do seu cadastro
                     </p>
                   )}
                 </div>

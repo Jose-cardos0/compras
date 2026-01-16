@@ -7,6 +7,57 @@ import {
 import { storage } from "../firebase/config";
 
 export const storageService = {
+  // Upload de foto de perfil do usuário
+  async uploadProfilePhoto(file, userEmail) {
+    try {
+      // Validar tipo de arquivo (apenas imagens)
+      const allowedTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+      ];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error(
+          "Tipo de arquivo não permitido. Use apenas JPG, PNG ou WEBP."
+        );
+      }
+
+      // Validar tamanho (máximo 5MB para fotos de perfil)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        throw new Error("Foto muito grande. Máximo permitido: 5MB.");
+      }
+
+      // Criar nome único para o arquivo
+      const timestamp = Date.now();
+      const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      const extension = file.name.split(".").pop();
+      const fileName = `${sanitizedEmail}_${timestamp}.${extension}`;
+      const filePath = `profile_photos/${fileName}`;
+
+      // Criar referência e fazer upload
+      const storageRef = ref(storage, filePath);
+      const snapshot = await uploadBytes(storageRef, file);
+
+      // Obter URL de download
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      return {
+        success: true,
+        downloadURL,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        storagePath: filePath,
+        uploadedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error("Erro no upload da foto de perfil:", error);
+      throw error;
+    }
+  },
+
   // Upload de arquivo para produto
   async uploadProductFile(file, orderId, productId) {
     try {

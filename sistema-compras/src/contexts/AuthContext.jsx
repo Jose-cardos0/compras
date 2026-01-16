@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -18,12 +19,15 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userPermissions, setUserPermissions] = useState(null);
+  const [appUserData, setAppUserData] = useState(null); // Dados do usuário do app (não admin)
   const [loading, setLoading] = useState(true);
+  const [userType, setUserType] = useState(null); // 'admin', 'appUser', 'pendingUser', null
 
-  const adminCredentials = {
-    email: "comprasnatville@gmail.com",
-    password: "compras2025@",
-  };
+  // Lista de emails que são MainAdmin
+  const mainAdminEmails = [
+    "comprasnatville@gmail.com",
+    "compras6natville@gmail.com",
+  ];
 
   // Definir status disponíveis no sistema
   const availableStatuses = [
@@ -46,19 +50,24 @@ export function AuthProvider({ children }) {
   // Carregar permissões do usuário do Firestore
   const loadUserPermissions = async (userEmail) => {
     try {
-      // Se for o admin principal, tem todas as permissões
-      if (userEmail === adminCredentials.email) {
+      // Se for um dos admins principais, tem todas as permissões
+      if (mainAdminEmails.includes(userEmail)) {
         setUserPermissions({
           allowedStatuses: availableStatuses.map((s) => s.value),
           isMainAdmin: true,
           canManageUsers: true,
-          name: "Alefe Oliveira",
+          name:
+            userEmail === "comprasnatville@gmail.com"
+              ? "Alefe Oliveira"
+              : "Admin Natville",
           email: userEmail,
         });
+        setUserType("admin");
+        setAppUserData(null);
         return;
       }
 
-      // Buscar permissões no Firestore
+      // Buscar permissões de admin no Firestore
       const userQuery = await getDoc(doc(db, "users", userEmail));
       if (userQuery.exists()) {
         const userData = userQuery.data();
@@ -69,27 +78,88 @@ export function AuthProvider({ children }) {
           name: userData.name || userEmail,
           email: userEmail,
         });
-      } else {
-        // Usuário não tem permissões cadastradas
-        setUserPermissions({
-          allowedStatuses: [],
-          isMainAdmin: false,
-          canManageUsers: false,
-          name: userEmail,
-          email: userEmail,
-        });
+        setUserType("admin");
+        setAppUserData(null);
+        return;
       }
+
+      // Se não for admin, verificar se é usuário do app
+      const appUserQuery = await getDoc(doc(db, "appUsers", userEmail));
+      if (appUserQuery.exists()) {
+        const appUser = appUserQuery.data();
+        if (appUser.isApproved) {
+          setAppUserData({ id: userEmail, ...appUser });
+          setUserType("appUser");
+          setUserPermissions(null);
+          return;
+        } else {
+          // Usuário existe mas não está aprovado
+          setAppUserData({ id: userEmail, ...appUser, pendingApproval: true });
+          setUserType("pendingUser");
+          setUserPermissions(null);
+          return;
+        }
+      }
+
+      // Verificar se tem solicitação pendente
+      const requestQuery = await getDoc(doc(db, "registrationRequests", userEmail));
+      if (requestQuery.exists()) {
+        const requestData = requestQuery.data();
+        if (requestData.status === "pendente") {
+          setAppUserData({ id: userEmail, ...requestData, pendingApproval: true });
+          setUserType("pendingUser");
+          setUserPermissions(null);
+          return;
+        } else if (requestData.status === "rejeitado") {
+          setAppUserData({ id: userEmail, ...requestData, rejected: true });
+          setUserType("rejectedUser");
+          setUserPermissions(null);
+          return;
+        }
+      }
+
+      // Usuário não tem permissões cadastradas e não é usuário do app
+      setUserPermissions(null);
+      setAppUserData(null);
+      setUserType(null);
     } catch (error) {
       console.error("Erro ao carregar permissões:", error);
-      setUserPermissions({
-        allowedStatuses: [],
-        isMainAdmin: false,
-        canManageUsers: false,
-        name: userEmail || "Usuário desconhecido",
-        email: userEmail || "",
-      });
+      setUserPermissions(null);
+      setAppUserData(null);
+      setUserType(null);
     }
   };
+
+  // Registrar novo usuário (apenas cria no Auth, dados ficam na solicitação)
+  async function registerUser(email, password) {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      return result;
+    } catch (error) {
+      console.error("Erro no registro:", error);
+      if (error.code === "auth/email-already-in-use") {
+        throw new Error("Este email já está em uso.");
+      }
+      throw error;
+    }
+  }
+
+  // Login para usuários do app
+  async function loginAppUser(email, password) {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result;
+    } catch (error) {
+      console.error("Erro no login:", error);
+      if (error.code === "auth/user-not-found") {
+        throw new Error("Usuário não encontrado.");
+      }
+      if (error.code === "auth/wrong-password") {
+        throw new Error("Senha incorreta.");
+      }
+      throw error;
+    }
+  }
 
   async function login(email, password) {
     try {
@@ -176,6 +246,8 @@ export function AuthProvider({ children }) {
         await loadUserPermissions(user.email);
       } else {
         setUserPermissions(null);
+        setAppUserData(null);
+        setUserType(null);
       }
       setLoading(false);
     });
@@ -183,11 +255,35 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  // Verificar se é admin
+  const isAdmin = () => {
+    return userType === "admin" || mainAdminEmails.includes(currentUser?.email);
+  };
+
+  // Verificar se é usuário do app aprovado
+  const isApprovedAppUser = () => {
+    return userType === "appUser" && appUserData?.isApproved;
+  };
+
+  // Verificar se está pendente aprovação
+  const isPendingApproval = () => {
+    return userType === "pendingUser";
+  };
+
+  // Verificar se foi rejeitado
+  const isRejected = () => {
+    return userType === "rejectedUser";
+  };
+
   const value = {
     currentUser,
     userPermissions,
+    appUserData,
+    userType,
     login,
     logout,
+    loginAppUser,
+    registerUser,
     loading,
     canChangeStatus,
     canChangeStatusFrom,
@@ -196,6 +292,11 @@ export function AuthProvider({ children }) {
     availableStatuses,
     statusWorkflow,
     loadUserPermissions,
+    isAdmin,
+    isApprovedAppUser,
+    isPendingApproval,
+    isRejected,
+    mainAdminEmails,
   };
 
   return (

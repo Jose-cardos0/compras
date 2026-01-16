@@ -7,6 +7,7 @@ import {
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedUserRoute from "./components/ProtectedUserRoute";
 
 // Páginas
 import OrderForm from "./pages/OrderForm";
@@ -14,6 +15,9 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import MigrationPage from "./pages/MigrationPage";
+import UserLogin from "./pages/UserLogin";
+import UserRegister from "./pages/UserRegister";
+import UserDashboard from "./pages/UserDashboard";
 
 function App() {
   return (
@@ -21,8 +25,29 @@ function App() {
       <Router>
         <div className="App notranslate" translate="no">
           <Routes>
-            {/* Rota pública - Formulário de pedidos */}
-            <Route path="/" element={<OrderForm />} />
+            {/* Rota principal - Formulário de pedidos (protegida para usuários) */}
+            <Route
+              path="/"
+              element={
+                <ProtectedUserRoute>
+                  <OrderForm />
+                </ProtectedUserRoute>
+              }
+            />
+
+            {/* Rotas de autenticação de usuários */}
+            <Route path="/login" element={<UserLogin />} />
+            <Route path="/register" element={<UserRegister />} />
+
+            {/* Dashboard do usuário */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedUserRoute>
+                  <UserDashboard />
+                </ProtectedUserRoute>
+              }
+            />
 
             {/* Rota de login do admin */}
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -56,7 +81,7 @@ function App() {
             />
 
             {/* Redirecionamento para rotas não encontradas */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
 
           {/* Componente de notificações toast */}
